@@ -1,6 +1,6 @@
 #pragma once
 
-#include <format.h>
+#include <jpeg/format.h>
 #include <misc.h>
 #include <ds/uthash.h>
 
@@ -17,9 +17,9 @@ typedef struct
     uint16_t mincode[16];
     uint16_t maxcode[16];
     uint16_t valptr[16];
-    
 } hfft;
 
 hfft *extract_huffman_table(dht table);
+void free_huffman_table(hfft *t);
 
 END_C_DECLS

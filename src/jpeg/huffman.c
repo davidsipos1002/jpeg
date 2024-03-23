@@ -1,4 +1,4 @@
-#include <huffman.h>
+#include <jpeg/huffman.h>
 
 static uint8_t *gen_huffsize(dht t)
 {
@@ -116,4 +116,10 @@ hfft *extract_huffman_table(dht table)
     free(huffsize);
     free(huffcode);
     return NULL;
+}
+
+void free_huffman_table(hfft *t)
+{
+    free(t->huffval);
+    free(t); 
 }

@@ -1,4 +1,4 @@
-#include <parser.h>
+#include <jpeg/parser.h>
 
 dht parse_dht(uint8_t *p, uint16_t *l)
 {
@@ -218,4 +218,11 @@ void free_shdr(shdr *s)
         free(el);
     }
     free(s);
+}
+
+uint16_t get_marker_seg_len(uint8_t *p)
+{
+    uint16_t ret;
+    TO_UINT_ADVANCE(uint16_t, ret, p);
+    return ENDIAN_SWAP(ret);
 }

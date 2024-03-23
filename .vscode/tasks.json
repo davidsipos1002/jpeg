@@ -20,7 +20,7 @@
         {
             "label": "Run",
             "type": "shell",
-            "command": "/bin/zsh -c './jpeg'",
+            "command": "/bin/zsh -c './build.sh'",
             "problemMatcher": [],
             "group": {
                 "kind": "test",

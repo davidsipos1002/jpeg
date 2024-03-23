@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <format.h>
+#include <jpeg/format.h>
 #include <misc.h>
 #include <ds/utlist.h>
 
@@ -33,5 +33,7 @@ void free_fhdr(fhdr *fhdr);
 // parse scan header
 shdr *parse_shdr(uint8_t *p, uint16_t *l);
 void free_shdr(shdr *s);
+
+uint16_t get_marker_seg_len(uint8_t *p);
 
 END_C_DECLS

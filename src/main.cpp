@@ -1,9 +1,9 @@
 #include <iostream>
 
 #include <file.h>
-#include <format.h>
-#include <parser.h>
-#include <huffman.h>
+#include <jpeg/format.h>
+#include <jpeg/parser.h>
+#include <jpeg/huffman.h>
 
 int main()
 {

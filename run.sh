@@ -1,0 +1,1 @@
+build/JPEG > out.log
