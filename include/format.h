@@ -8,6 +8,8 @@
 #define DENSITY_DPI 0x01
 #define DENSITY_DPCM 0x02
 
+BEGIN_C_DECLS
+
 typedef struct
 {
     uint16_t lp; // total APP0 count
@@ -68,15 +70,18 @@ typedef struct
 #define HUFFMAN_DC 0
 #define HUFFMAN_AC 1
 
-typedef struct
+typedef struct _dhtt
 {
-    uint16_t lh; // Huffman table specification length
     uint8_t tc; // table class
     uint8_t th; // Huffman table destination identifier
     uint8_t l[16]; // number of Huffman codes of length i
+    uint16_t lv; // length of v
     uint8_t *v; // values associated with each Huffman code
-} dht;
+    struct _dhtt *next;
+    struct _dhtt *prev;
+} dhtt;
 
+typedef dhtt* dht;
 typedef struct 
 {
     uint16_t lr; // define length of restart segment length, always 4
@@ -88,3 +93,5 @@ typedef struct
     uint16_t ld; // define number of lines segment length, always 4
     uint16_t nl; // number of lines
 } dnl;
+
+END_C_DECLS
