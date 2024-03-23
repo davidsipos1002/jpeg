@@ -20,8 +20,6 @@ typedef struct
     
 } hfft;
 
-#define DUMP_HUFFMAN
-
 hfft *extract_huffman_table(dht table);
 
 END_C_DECLS

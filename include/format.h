@@ -8,6 +8,20 @@
 #define DENSITY_DPI 0x01
 #define DENSITY_DPCM 0x02
 
+#define MRK(x) (0xFF00 | (x))
+#define BDCT_SOF 0xC0
+#define ESDCT_SOF 0xC1
+#define EPDCT_SOF 0xC2
+#define DHT 0xC4
+#define RST(m) (0xD0 | (m))
+#define SOI 0xD8
+#define EOI 0xD9
+#define SOS 0xDA
+#define DQT 0xDB
+#define DNL 0xDC
+#define DRI 0xDD
+#define APP(n) (0xE0 | (n))
+
 BEGIN_C_DECLS
 
 typedef struct
@@ -23,17 +37,18 @@ typedef struct
     uint8_t rgb[];
 } jfif_app0;
 
-typedef struct
+typedef struct _fhdr_comp
 {
     uint8_t c; // component id
     uint8_t h; // horizontal sampling factor
     uint8_t v; // vertical sampling factor
     uint8_t tq; // quantization table selector
+    struct _fhdr_comp *next;
+    struct _fhdr_comp *prev;
 } fhdr_comp;
 
 typedef struct
 {
-    uint16_t lf; // frame header length
     uint8_t p; // precision
     uint16_t y; // max line count
     uint16_t x; // max sample count per line
@@ -41,16 +56,17 @@ typedef struct
     fhdr_comp *comp; // component-specification parameters
 } fhdr;
 
-typedef struct
+typedef struct _shdr_comp
 {
     uint8_t cs; // scan component selector
     uint8_t td; // dc entropy coding table destination selector
     uint8_t ta; // ac entropy coding table destination selector
+    struct _shdr_comp *next;
+    struct _shdr_comp *prev;
 } shdr_comp;
 
 typedef struct
 {
-    uint16_t ls; // scan header length
     uint8_t ns; // number of components in the scan
     shdr_comp *comp; // component-specification parameters
     uint8_t ss; // start of spectral selection
@@ -85,16 +101,5 @@ typedef struct _dhtt
 } dhtt;
 
 typedef dhtt* dht;
-typedef struct 
-{
-    uint16_t lr; // define length of restart segment length, always 4
-    uint16_t ri; // number of MCUs in a restart interval
-} dri;
-
-typedef struct 
-{
-    uint16_t ld; // define number of lines segment length, always 4
-    uint16_t nl; // number of lines
-} dnl;
 
 END_C_DECLS

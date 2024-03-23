@@ -1,7 +1,7 @@
 #include <iostream>
 
 #include <file.h>
-#include <markers.h>
+#include <format.h>
 #include <parser.h>
 #include <huffman.h>
 
@@ -25,7 +25,8 @@ int main()
         {
             std::cout << "define huffman table" << std::endl;
             
-            dht tables = parse_dht(p + 2);
+            uint16_t l;
+            dht tables = parse_dht(p + 2, &l);
             dht curr;
             DL_FOREACH(tables, curr)
             {
@@ -34,12 +35,25 @@ int main()
             free_dht(tables);
         }
         else if (ENDIAN_SWAP(*marker) == MRK(BDCT_SOF))
+        {
             std::cout << "baseline sof" << std::endl;
+            uint16_t l;
+            fhdr *f = parse_fhdr(p + 2, &l);
+            free_fhdr(f);
+        }
         else if (ENDIAN_SWAP(*marker) == MRK(DQT))
         {
             std::cout << "define quantization table" << std::endl;
-            dqt *tables = parse_dqt(p + 2);
+            uint16_t l;
+            dqt *tables = parse_dqt(p + 2, &l);
             free_dqt(tables);
+        }
+        else if (ENDIAN_SWAP(*marker) == MRK(SOS))
+        {
+            std::cout << "scan" << std::endl;
+            uint16_t l;
+            shdr *s = parse_shdr(p + 2, &l);
+            free_shdr(s);
         }
         p++;
     }
