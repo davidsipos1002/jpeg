@@ -73,6 +73,8 @@ hfft *extract_huffman_table(dht table)
     uint8_t *huffsize = gen_huffsize(table);
     uint16_t *huffcode = gen_huffcode(huffsize, table->lv);
     hfft *huff;
+    huff->class = table->tc;
+    huff->destination = table->th;
     safeMalloc(huff, sizeof(hfft));
     huff->valcount = table->lv;
     safeMalloc(huff->huffval, table->lv * sizeof(uint8_t));

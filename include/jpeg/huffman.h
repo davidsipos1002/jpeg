@@ -8,6 +8,8 @@ BEGIN_C_DECLS
 
 typedef struct
 {
+    uint8_t class;
+    uint8_t destination;
     // encoder tables
     uint8_t ehufsi[256];
     uint16_t ehufco[256];
