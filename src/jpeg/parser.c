@@ -68,6 +68,7 @@ dqt *parse_dqt(uint8_t *p, uint16_t *l)
         p += qsize;
 
 #ifdef DUMP_QUANTIZATION
+        printf("----- QUANTIZATION TABLE -----\n");
         printf("precision %u destination %u\n", t->pq, t->tq);
         if (t->pq)
         {
@@ -151,6 +152,7 @@ fhdr *parse_fhdr(uint8_t *p, uint16_t *l)
     }
 
 #ifdef DUMP_FRAME_HEADER
+    printf("----- FRAME HEADER -----\n");
     printf("p %u y %u x %u nf %u\n", ret->p, ret->y, ret->x, ret->nf);
     fhdr_comp *el;
     printf("components:\n");
@@ -199,6 +201,7 @@ shdr *parse_shdr(uint8_t *p, uint16_t *l)
     ret->al = *p & 0xF;
 
 #ifdef DUMP_SCAN_HEADER
+    printf("----- SCAN HEADER -----\n");
     printf("ns: %u\n", ret->ns);
     shdr_comp *el;
     DL_FOREACH(ret->comp, el)

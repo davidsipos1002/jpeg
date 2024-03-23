@@ -8,7 +8,7 @@ BEGIN_C_DECLS
 
 typedef struct
 {
-    uint8_t class;
+    uint8_t tclass;
     uint8_t destination;
     // encoder tables
     uint8_t ehufsi[256];
@@ -20,6 +20,8 @@ typedef struct
     uint16_t maxcode[16];
     uint16_t valptr[16];
 } hfft;
+
+#define DUMP_HUFFMAN
 
 hfft *extract_huffman_table(dht table);
 void free_huffman_table(hfft *t);

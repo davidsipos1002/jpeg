@@ -57,6 +57,7 @@ static void gen_decoder_tables(dht t, hfft *huff, uint16_t *huffcode)
     {
         if(!t->l[i])
         {
+            huff->mincode[i] = 0xFFFF;
             huff->maxcode[i] = 0xFFFF;
             continue;
         }
@@ -73,9 +74,9 @@ hfft *extract_huffman_table(dht table)
     uint8_t *huffsize = gen_huffsize(table);
     uint16_t *huffcode = gen_huffcode(huffsize, table->lv);
     hfft *huff;
-    huff->class = table->tc;
-    huff->destination = table->th;
     safeMalloc(huff, sizeof(hfft));
+    huff->tclass = table->tc;
+    huff->destination = table->th;
     huff->valcount = table->lv;
     safeMalloc(huff->huffval, table->lv * sizeof(uint8_t));
     order_codes(table, huffsize, huffcode, huff); 
@@ -83,6 +84,7 @@ hfft *extract_huffman_table(dht table)
     gen_decoder_tables(table, huff, huffcode);
 
 #ifdef DUMP_HUFFMAN
+    printf("----- HUFFMAN TABLE -----\n");
     printf("category: %u destination: %u\n", table->tc, table->th);
     printf("bits:\n");
     for (uint16_t i = 0;i < 16;i ++)
@@ -117,7 +119,7 @@ hfft *extract_huffman_table(dht table)
 
     free(huffsize);
     free(huffcode);
-    return NULL;
+    return huff;
 }
 
 void free_huffman_table(hfft *t)

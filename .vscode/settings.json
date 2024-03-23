@@ -46,6 +46,7 @@
         "variant": "cpp",
         "algorithm": "cpp",
         "format.h": "c",
-        "parser.h": "c"
+        "parser.h": "c",
+        "decoder.h": "c"
     },
 }
