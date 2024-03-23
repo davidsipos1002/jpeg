@@ -59,12 +59,15 @@ typedef struct
     uint8_t al; // successive approximation bit position low
 } shdr;
 
-typedef struct
+#define QUANTIZATION_8 0
+#define QUANTIZATION_16 1
+typedef struct _dqt
 {
-    uint16_t lq; // quantization table definition length
     uint8_t pq; // quantization table element precision
     uint8_t tq; // quantization table destination identifier
     uint8_t *q; // quantization table
+    struct _dqt *next;
+    struct _dqt *prev;
 } dqt;
 
 #define HUFFMAN_DC 0

@@ -7,7 +7,7 @@
 
 int main()
 {
-    mmapfile *f = map_file("img/bdct_simple.jpg");
+    mmapfile *f = map_file("img/bdct_simple80.jpg");
     if (!f)
     {
         std::cout << "fail";
@@ -35,6 +35,12 @@ int main()
         }
         else if (ENDIAN_SWAP(*marker) == MRK(BDCT_SOF))
             std::cout << "baseline sof" << std::endl;
+        else if (ENDIAN_SWAP(*marker) == MRK(DQT))
+        {
+            std::cout << "define quantization table" << std::endl;
+            dqt *tables = parse_dqt(p + 2);
+            free_dqt(tables);
+        }
         p++;
     }
     close_file(f);
