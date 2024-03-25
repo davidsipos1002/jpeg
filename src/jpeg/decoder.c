@@ -4,8 +4,10 @@
 #include <math.h>
 
 #include <file.h>
+#include <mem.h>
 #include <jpeg/tables.h>
 #include <jpeg/parser.h>
+#include <jpeg/calculate.h>
 
 #define MODE_BDCT 0
 
@@ -22,7 +24,8 @@ typedef struct
     uint16_t blcx; // number of blocks on a row (multiple of h)
     uint32_t mcuc; // number of mcus according to sampling factors
     uint32_t blc; // total block count
-    uint8_t **blocks; // decoded blocks of the component
+    int16_t **blocks; // decoded blocks of the component
+    arrmat *m; // array of 8x8 matrices
 } component;
 
 typedef struct
@@ -86,11 +89,11 @@ static void compute_component_params(decoder_s *d, component *c)
         c->blcy += c->v - (bly % c->v);
     // allocate memory for the blocks of the component
     uint32_t block_count = c->blcx * c->blcy; 
-    safeMalloc(c->blocks, block_count * sizeof(uint8_t *));
+    safeMalloc(c->blocks, block_count * sizeof(int16_t *));
     for (uint32_t i = 0; i < block_count; i++)
     {
-        safeMalloc(c->blocks[i], 64 * sizeof(uint8_t));
-        memset(c->blocks[i], 0, 64 * sizeof(uint8_t));
+        safeMalloc(c->blocks[i], 64 * sizeof(int16_t));
+        memset(c->blocks[i], 0, 64 * sizeof(int16_t));
     }
     c->blc = block_count;
     c->mcuc = (c->blcy / c->v) * (c->blcx / c->h);
@@ -100,8 +103,8 @@ static void compute_component_params(decoder_s *d, component *c)
 decoder *init_decoder(const char *filename)
 {
     decoder_s *ret;
-    memset(ret, 0, sizeof(decoder_s));
     safeMalloc(ret, sizeof(decoder_s));
+    memset(ret, 0, sizeof(decoder_s));
     ret->file = map_file(filename);
     ret->p = ret->file->p;
     ret->tables = init_tables();
@@ -123,7 +126,7 @@ static uint16_t get_marker(decoder_s *d)
 static void interpret_markers(decoder_s *d, uint16_t marker)
 {
 #ifdef DECODER_LOG
-    printf("[Decoder]: Interpreting marker %u\n", marker);
+    printf("[Decoder]: Interpreting marker %x\n", marker);
 #endif
     uint16_t len;
     switch (marker)
@@ -249,7 +252,7 @@ uint8_t decode(decoder_s *d, uint8_t coeff)
     return hft->huffval[j];
 }
 
-static uint8_t decode_data_unit(decoder_s *d, uint8_t *block)
+static uint8_t decode_data_unit(decoder_s *d, int16_t *block)
 {
 #ifdef DECODER_LOG
     printf("[Decoder]: Decoding new data unit\n");
@@ -267,6 +270,7 @@ static uint8_t decode_data_unit(decoder_s *d, uint8_t *block)
     printf("[Decoder]: Received %d\n", diff);
 #endif
     // obtain DC coefficient
+    diff = extend(diff, t);
     block[0] = diff + d->currscan.pred[d->currscan.currc];
     d->currscan.pred[d->currscan.currc] = block[0];
     
@@ -332,7 +336,7 @@ static uint8_t decode_mcu(decoder_s *d)
             {
                 uint16_t bi = mcuy * comp->v + i;
                 uint16_t bj = mcux * comp->h + j;
-                uint8_t *block = comp->blocks[bi * comp->blcx + bj];
+                int16_t *block = comp->blocks[bi * comp->blcx + bj];
                 decode_data_unit(d, block);
             }
         }
@@ -521,6 +525,54 @@ static uint8_t decode_frame(decoder_s *d)
     return 1; 
 }
 
+static uint8_t rebuild_image(decoder_s *d)
+{    
+    // obtain the pixel values from the decoded blocks
+    for (uint8_t i = 0; i < 3; i++)
+    {
+        uint8_t *q = d->tables->quantization[d->comps[i].tq];
+        if (d->comps[i].blc)
+        {
+            // allocate the matrices 
+            d->comps[i].m = alloc_matrices(d->comps[i].blc, 8, 8);
+            // dequantize, unzigzag, idct and level shift
+            for (uint32_t b = 0; b < d->comps[i].blc; b++)
+            {
+                int16_t *currbl = d->comps[i].blocks[b];
+                float **currmat = d->comps[i].m->mat[b];
+                dequantize(currbl, q);
+                unzigzag(currbl, currmat);
+                // free the block as it is not needed anymore
+                free(d->comps[i].blocks[b]); 
+                idct(currmat);
+                undo_level_shift(currmat);
+            }
+            // free all block pointers as they are not needed anymore
+            free(d->comps[i].blocks);
+        }
+    } 
+    // we have YCbCr blocks for all components
+    // we have to convert to RGB
+    // because are only decoding JFIF according to the standard we have:
+    // component 0 => Y
+    // component 1 => Cb
+    // component 2 => Cr 
+    FILE *f = fopen("/Users/david/Year 3/Semester 2/IP/Lab/ipmanager/block.bl", "w");
+    fprintf(f, "%d %d\n", d->comps[0].blcy, d->comps[0].blcx);
+    for (uint32_t i = 0; i < d->comps[0].blc; i++)
+    {
+        for (uint8_t ii = 0; ii < 8; ii++)
+        {
+            for (uint8_t jj = 0; jj < 8; jj++)
+                fprintf(f, "%f ", d->comps[0].m->mat[i][ii][jj]);
+            fprintf(f, "\n");
+        }
+        fprintf(f, "\n");
+    }
+    fclose(f);
+    return 1;
+}
+
 // this is the main image decoder function
 uint8_t decode_image(decoder *dec)
 {
@@ -538,13 +590,16 @@ uint8_t decode_image(decoder *dec)
         interpret_markers(d, marker);
         marker = get_marker(d);
     }
+    uint8_t stat = 0;
     switch (marker)
     {
         case MRK(BDCT_SOF):
             d->mode = MODE_BDCT;
-            return decode_frame(d); 
+            stat = decode_frame(d); 
     }
-    return 0;
+    if (stat)
+        stat = rebuild_image(d);
+    return stat;
 }
 
 // free decoder resources
@@ -553,14 +608,11 @@ void free_decoder(decoder *dec)
     decoder_s *d = (decoder_s *) dec;
     close_file(d->file);
     free_tables(d->tables);        
+    // free matrices
     for (uint8_t i = 0; i < 3; i++)
     {
         if (d->comps[i].blc)
-        {
-            for (uint32_t b = 0; b < d->comps[i].blc; b++)
-                free(d->comps[i].blocks[b]); 
-        }
-        free(d->comps[i].blocks);
+            free_matrices(d->comps[i].m);
     }
     free(dec);
 }

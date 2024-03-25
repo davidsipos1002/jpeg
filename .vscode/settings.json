@@ -47,6 +47,9 @@
         "algorithm": "cpp",
         "format.h": "c",
         "parser.h": "c",
-        "decoder.h": "c"
+        "decoder.h": "c",
+        "memory.h": "c",
+        "calculate.h": "c",
+        "mem.h": "c"
     },
 }
