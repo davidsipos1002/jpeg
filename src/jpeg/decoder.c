@@ -8,6 +8,7 @@
 #include <jpeg/tables.h>
 #include <jpeg/parser.h>
 #include <jpeg/calculate.h>
+#include <jpeg/image.h>
 
 #define MODE_BDCT 0
 
@@ -60,6 +61,7 @@ typedef struct
     uint16_t vmax; // max vertical sampling factor
     component comps[3]; // component information
     scan currscan; // current scan information
+    image *img;
 } decoder_s;
 
 // calculate component properties which directly the decoding process
@@ -360,7 +362,7 @@ static uint8_t decode_restart_interval(decoder_s *d)
     printf("[Decoder]: Decoding new restart interval\n");
 #endif
     // reset decoder
-    memset(d->currscan.pred, 0, 3 * sizeof(uint8_t));
+    memset(d->currscan.pred, 0, 3 * sizeof(int16_t));
     d->currscan.cnt = 0;
     // mcus to decode in this restart interval
     uint32_t mcud = d->currscan.mcur >= d->currscan.ril ? d->currscan.ril : d->currscan.mcur;    
@@ -525,6 +527,92 @@ static uint8_t decode_frame(decoder_s *d)
     return 1; 
 }
 
+// build grayscale image R = G = B = Y
+static void build_grayscale(decoder_s *d)
+{
+    image *img = init_image(d->comps[0].blcy * 8, d->comps[0].blcx * 8);    
+    uint32_t bi = d->comps[0].blcy;
+    uint32_t bj = d->comps[0].blcx;
+    uint32_t bndx = 0;
+    for (uint32_t ii = 0; ii < bi; ii++)
+    {
+        for (uint32_t jj = 0; jj < bj; jj++)
+        {
+            for (uint8_t i = 0; i < 8; i++)
+            {
+                for (uint8_t j = 0; j < 8; j++)
+                {
+                    float p = d->comps[0].m->mat[bndx][i][j];
+                    if (p > 255)
+                        p = 255;
+                    else if (p < 0)
+                        p = 0;
+                    img->r[ii * 8 + i][jj * 8 + j] = p;
+                    img->g[ii * 8 + i][jj * 8 + j] = p;
+                    img->b[ii * 8 + i][jj * 8 + j] = p;
+                }
+            }
+            bndx++;
+        }
+    }
+    d->img = img;
+}
+
+// extract value corresponding to iimg and jimg image position 
+// from a potentially subsampled component
+static float get_subsampled_component_value(uint32_t rows, uint32_t cols, 
+                                            uint32_t iimg, uint32_t jimg, component *comp)
+{
+    uint32_t ifactor = rows / (comp->blcy * 8);
+    uint32_t jfactor = cols / (comp->blcx  * 8);
+    uint32_t icomp = iimg / ifactor;
+    uint32_t jcomp = jimg / jfactor;
+    uint32_t iblock = icomp / 8;
+    uint32_t jblock = jcomp / 8;
+    uint32_t iblockpos = icomp % 8;
+    uint32_t jblockpos = jcomp % 8;
+    uint32_t bndx = iblock * comp->blcx + jblock;
+    assert(bndx < comp->blc);
+    return comp->m->mat[bndx][iblockpos][jblockpos];
+}
+
+// build a color image i.e. convert from YCbCr to RGB
+static void build_color(decoder_s *d)
+{
+    uint32_t rows = d->comps[0].blcy * 8;
+    uint32_t cols = d->comps[0].blcx * 8;
+    image *img = init_image(rows, cols);    
+    uint32_t bi = d->comps[0].blcy;
+    uint32_t bj = d->comps[0].blcx;
+    uint32_t bndx = 0;
+    float y, cb, cr;
+    uint8_t r, g, b;
+    
+    for (uint32_t ii = 0; ii < bi; ii++)
+    {
+        for (uint32_t jj = 0; jj < bj; jj++)
+        {
+            for (uint8_t i = 0; i < 8; i++)
+            {
+                for (uint8_t j = 0; j < 8; j++)
+                {
+                    uint32_t iimg = ii * 8 + i;
+                    uint32_t jimg = jj * 8 + j;
+                    float y = d->comps[0].m->mat[bndx][i][j];
+                    float cb = get_subsampled_component_value(rows, cols, iimg, jimg, &d->comps[1]); 
+                    float cr = get_subsampled_component_value(rows, cols, iimg, jimg, &d->comps[2]);
+                    convert_to_rgb(y, cb, cr, &r, &g, &b);
+                    img->r[ii * 8 + i][jj * 8 + j] = r;
+                    img->g[ii * 8 + i][jj * 8 + j] = g;
+                    img->b[ii * 8 + i][jj * 8 + j] = b;
+                }
+            } 
+            bndx++;
+        }
+    }
+    d->img = img;
+}
+
 static uint8_t rebuild_image(decoder_s *d)
 {    
     // obtain the pixel values from the decoded blocks
@@ -551,24 +639,47 @@ static uint8_t rebuild_image(decoder_s *d)
             free(d->comps[i].blocks);
         }
     } 
+
+    // we won't get rid of padding for now because it is not essential
     // we have YCbCr blocks for all components
     // we have to convert to RGB
     // because are only decoding JFIF according to the standard we have:
     // component 0 => Y
     // component 1 => Cb
     // component 2 => Cr 
-    FILE *f = fopen("/Users/david/Year 3/Semester 2/IP/Lab/ipmanager/block.bl", "w");
-    fprintf(f, "%d %d\n", d->comps[0].blcy, d->comps[0].blcx);
-    for (uint32_t i = 0; i < d->comps[0].blc; i++)
+    
+    // we have grayscale, just copy luma to r g b
+    if (d->nf == 1)
+        build_grayscale(d);
+    else
+        build_color(d);
+
+    FILE *f = fopen("/Users/david/Year 3/Semester 2/IP/Lab/ipmanager/img.txt", "w");
+
+    fprintf(f, "%u %u\n", d->img->y, d->img->x);
+    for (uint16_t i = 0; i < d->img->y; i++)
     {
-        for (uint8_t ii = 0; ii < 8; ii++)
-        {
-            for (uint8_t jj = 0; jj < 8; jj++)
-                fprintf(f, "%f ", d->comps[0].m->mat[i][ii][jj]);
-            fprintf(f, "\n");
-        }
+        for (uint16_t j = 0; j < d->img->x; j++)
+            fprintf(f, "%u ", d->img->r[i][j]); 
         fprintf(f, "\n");
     }
+    fprintf(f, "\n");
+    
+    for (uint16_t i = 0; i < d->img->y; i++)
+    {
+        for (uint16_t j = 0; j < d->img->x; j++)
+            fprintf(f, "%u ", d->img->g[i][j]); 
+        fprintf(f, "\n");
+    }
+    fprintf(f, "\n");
+
+    for (uint16_t i = 0; i < d->img->y; i++)
+    {
+        for (uint16_t j = 0; j < d->img->x; j++)
+            fprintf(f, "%u ", d->img->b[i][j]); 
+        fprintf(f, "\n");
+    }
+
     fclose(f);
     return 1;
 }
@@ -614,5 +725,6 @@ void free_decoder(decoder *dec)
         if (d->comps[i].blc)
             free_matrices(d->comps[i].m);
     }
-    free(dec);
+    free_image(d->img);
+    free(d);
 }

@@ -1,6 +1,7 @@
 #include <jpeg/calculate.h>
 
 #include <math.h>
+#include <stdlib.h>
 
 static uint8_t zigzag[8][8] = 
 {
@@ -224,4 +225,38 @@ void undo_level_shift(float **mat)
 	for (uint8_t i = 0; i < 8; i++)
 		for (uint8_t j = 0; j < 8; j++)
 			mat[i][j] += 128;
+}
+
+static float get_min(float x, float y)
+{
+	if (x < y)
+		return x;
+	return y;
+}
+
+static float get_max(float x, float y)
+{
+	if (x < y)
+		return y;
+	return x;
+}
+
+// defined in JFIF standard
+static float get_round(float x)
+{
+	return floor(x + 0.5);
+}
+
+// formulas taken from the JFIF standard
+// R = Min(Max(0,Round(Y +1.402*(CR −128) )),255)
+// G = Min(Max(0,Round(Y −(0.114*1.772*(CB −128)+0.299*1.402*(CR −128))/0.587)),255)
+// B = Min(Max(0,Round(Y +1.772*(CB −128) )),255)
+void convert_to_rgb(float y, float cb, float cr, uint8_t *rp, uint8_t *gp, uint8_t *bp)
+{
+	float r = get_min(get_max(0, get_round(y + 1.402 * (cr - 128))), 255); 	
+	float g = get_min(get_max(0, get_round(y - (0.114 * 1.772 * (cb - 128) + 0.299 * 1.402 * (cr - 128))/0.587)), 255);
+	float b = get_min(get_max(0, get_round(y + 1.772 * (cb - 128))), 255);
+	*rp = (uint8_t) r;
+	*gp = (uint8_t) g;
+	*bp = (uint8_t) b;
 }

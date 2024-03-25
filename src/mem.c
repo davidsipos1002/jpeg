@@ -33,3 +33,19 @@ void free_matrices(arrmat *p)
     free(p->mat);
     free(p);
 }
+
+uint8_t **alloc_mat(uint16_t row, uint16_t col)
+{
+    uint8_t **ret;
+    safeMalloc(ret, row * sizeof(uint8_t *));
+    for (uint16_t i = 0; i < row; i++)
+        safeMalloc(ret[i], col * sizeof(uint8_t));
+    return ret;
+}
+
+void free_mat(uint8_t **mat, uint16_t row, uint16_t col)
+{
+    for (uint16_t i = 0; i < row; i++)
+        free(mat[i]);
+    free(mat);
+}
