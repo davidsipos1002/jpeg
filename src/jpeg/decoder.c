@@ -59,6 +59,7 @@ typedef struct
     scan currscan; // current scan information
 } decoder_s;
 
+// calculate component properties which directly the decoding process
 static void compute_component_params(decoder_s *d, component *c)
 {
     // calculate the component's dimension
@@ -95,6 +96,7 @@ static void compute_component_params(decoder_s *d, component *c)
     c->mcuc = (c->blcy / c->v) * (c->blcx / c->h);
 }
 
+// allocate memory for the decoder
 decoder *init_decoder(const char *filename)
 {
     decoder_s *ret;
@@ -103,9 +105,11 @@ decoder *init_decoder(const char *filename)
     ret->file = map_file(filename);
     ret->p = ret->file->p;
     ret->tables = init_tables();
+    // return the decoder struct as opaque pointer to hide the struct layout
     return (decoder *) ret;
 }
 
+// reads two bytes and interprets them as a marker
 static uint16_t get_marker(decoder_s *d)
 {
     uint16_t marker;
@@ -113,8 +117,14 @@ static uint16_t get_marker(decoder_s *d)
     return ENDIAN_SWAP(marker);
 }
 
+// interpret markers: DHT (define huffman table), DQT (define quantization table)
+// DRI (define restart interval)
+// for any other marker jump over it
 static void interpret_markers(decoder_s *d, uint16_t marker)
 {
+#ifdef DECODER_LOG
+    printf("[Decoder]: Interpreting marker %u\n", marker);
+#endif
     uint16_t len;
     switch (marker)
     {
@@ -153,6 +163,7 @@ static void interpret_markers(decoder_s *d, uint16_t marker)
     d->p += len;
 }
 
+// extend the sign bit of a decoded value V 
 static int16_t extend(int16_t v, uint8_t t)
 {
     if (!t)
@@ -168,16 +179,24 @@ static int16_t extend(int16_t v, uint8_t t)
     return v;
 }
 
+// get the next bit of the file, ignore byte stuffing
 static uint8_t nextbit(decoder_s *d)
 {
+#ifdef DECODER_LOG
+    printf("[Decoder]: Nextbit\n");
+#endif
     static uint8_t b;
     if (!d->currscan.cnt)
     {
         TO_UINT_ADVANCE(uint8_t, b, d->p);
+#ifdef DECODER_LOG
+        printf("[Decoder]: Read new byte %X from %llX\n", b,(uint64_t) ((d->p - sizeof(uint8_t)) - (uint8_t *) d->file->p));
+#endif
         d->currscan.cnt = 8;
         if (b == 0xFF)
         {
             uint8_t b2 = TO_UINT_ADVANCE(uint8_t, b2, d->p); 
+            // we don't expect any marker here because we don't support DNL
             assert(b2 == 0);
         }
     }
@@ -187,18 +206,26 @@ static uint8_t nextbit(decoder_s *d)
     return ret;
 }
 
+// receive s bits from the file
 static int16_t receive(decoder_s *d, uint8_t s)
 {
+#ifdef DECODER_LOG
+    printf("[Decoder]: Receiving %u bits from the file\n", s);
+#endif
     int16_t v = 0;
     for (uint8_t i = 0;i < s; i++)
         v = (v << 1) + nextbit(d);
     return v;
 }
 
+// fetch and interpret the next Huffman code 
 uint8_t decode(decoder_s *d, uint8_t coeff)
 {
+#ifdef DECODER_LOG
+    printf("[Decoder]: Interpreting next Huffman code\n");
+#endif
     uint8_t i = 0;
-    uint8_t code = nextbit(d);
+    uint16_t code = nextbit(d);
     uint8_t currc = d->currscan.currc;
     uint8_t tsel = d->currscan.tbl[currc][coeff];
     hfft *hft;
@@ -213,26 +240,52 @@ uint8_t decode(decoder_s *d, uint8_t coeff)
     }
     uint16_t j = hft->valptr[i];
     j = j + code - hft->mincode[i];
+#ifdef DECODER_LOG
+    printf("[Decoder]: Decoded => code %u valptr %u size %u val %u", code, hft->valptr[i], i, hft->huffval[j]);
+    printf(" huffman code: ");
+    print_binary16(code);
+    printf("\n");
+#endif
     return hft->huffval[j];
 }
 
 static uint8_t decode_data_unit(decoder_s *d, uint8_t *block)
 {
+#ifdef DECODER_LOG
+    printf("[Decoder]: Decoding new data unit\n");
+#endif
     // decode DC DIFF
+#ifdef DECODER_LOG
+    printf("[Decoder]: Decoding DC...\n");
+#endif
     uint8_t t = decode(d, HUFFMAN_DC);
+#ifdef DECODER_LOG
+    printf("[Decoder]: Decode return size %u\n", t);
+#endif
     int16_t diff = receive(d, t);
-    diff = extend(diff, t);
+#ifdef DECODER_LOG
+    printf("[Decoder]: Received %d\n", diff);
+#endif
     // obtain DC coefficient
     block[0] = diff + d->currscan.pred[d->currscan.currc];
     d->currscan.pred[d->currscan.currc] = block[0];
     
     // decode AC coefficients
+#ifdef DECODER_LOG
+    printf("[Decoder]: Decoding AC...\n");
+#endif
     uint8_t k = 1;
     while (k < 64)
     {
+#ifdef DECODER_LOG
+        printf("k is %u\n", k);
+#endif
         uint8_t rs = decode(d, HUFFMAN_AC);
         uint8_t s = rs & 0xF;
         uint8_t r = rs >> 4;
+#ifdef DECODER_LOG
+        printf("[Decoder]: Decode returned %u s %u r %u\n", rs, s, r);
+#endif
         if (!s)
         {
             if (r == 15)
@@ -244,6 +297,9 @@ static uint8_t decode_data_unit(decoder_s *d, uint8_t *block)
         }
         k += r;
         block[k] = receive(d, s);
+#ifdef DECODER_LOG
+        printf("[Decoder]: Received %u\n", block[k]);
+#endif
         block[k] = extend(block[k], s);
         k++;
     }
@@ -252,6 +308,9 @@ static uint8_t decode_data_unit(decoder_s *d, uint8_t *block)
 
 static uint8_t decode_mcu(decoder_s *d)
 {
+#ifdef DECODER_LOG
+    printf("[Decoder]: Decoding MCU\n");
+#endif
     uint8_t cpos = 0;
     uint8_t c;
     while ((c = d->currscan.comps[cpos]) != 0xFF)
@@ -261,6 +320,9 @@ static uint8_t decode_mcu(decoder_s *d)
         uint16_t mcu_cols = comp->blcx / comp->h;
         uint16_t mcuy = d->currscan.mcucurr / mcu_cols;
         d->currscan.currc = c;
+#ifdef DECODER_LOG
+        printf("[Decoder]: Current component %u td %u ta %u\n", c, d->currscan.tbl[c][HUFFMAN_DC], d->currscan.tbl[c][HUFFMAN_AC]);
+#endif
         if (mcuy >= mcu_rows)
             return 0;
         uint16_t mcux = d->currscan.mcucurr % mcu_cols; 
@@ -280,13 +342,19 @@ static uint8_t decode_mcu(decoder_s *d)
     return 1;
 }
 
+// this function checks if its input is a marker, i.e. if it of the form
+// 0xFFLL where LL != 0
 static uint8_t is_marker(uint16_t marker)
 {
     return (marker >> 8) == 0xFF && (marker & 0xFF) != 0;
 }
 
+// this decodes a new restart interval
 static uint8_t decode_restart_interval(decoder_s *d)
 {
+#ifdef DECODER_LOG
+    printf("[Decoder]: Decoding new restart interval\n");
+#endif
     // reset decoder
     memset(d->currscan.pred, 0, 3 * sizeof(uint8_t));
     d->currscan.cnt = 0;
@@ -299,6 +367,9 @@ static uint8_t decode_restart_interval(decoder_s *d)
     } 
     d->currscan.mcur -= mcud;
     uint16_t marker; 
+#ifdef DECODER_LOG
+    printf("[Decoder]: Restart interval finished we are at %p\n", (uint8_t *) (d->p - (uint8_t *) d->file->p));
+#endif
     do
     {
         marker = get_marker(d);
@@ -312,8 +383,12 @@ static uint8_t decode_restart_interval(decoder_s *d)
     return 1;
 }
 
+// this function decodes an image scan
 static uint8_t decode_scan(decoder_s *d)
 {
+#ifdef DECODER_LOG
+    printf("[Decoder]: Decoding new scan\n");
+#endif
     uint16_t len;
     shdr *s = parse_shdr(d->p, &len);
     d->p += len;
@@ -359,8 +434,8 @@ static uint8_t decode_scan(decoder_s *d)
     d->currscan.ricount = ricount;
     d->currscan.mcur = mcuc;
     d->currscan.mcucurr = 0;
-#ifdef DUMP_SCAN_HEADER
-    printf("ril: %d => restart intervals: %d\n", d->ril, ricount);
+#ifdef DECODER_LOG
+    printf("[Decoder]: Restart interval length: %d => Restart intervals: %d\n", d->ril, ricount);
 #endif
     fflush(stdout);
     for (uint16_t i = 0; i < ricount; i++)
@@ -371,8 +446,12 @@ static uint8_t decode_scan(decoder_s *d)
     return 1; 
 }
 
+// this function decodes an image
 static uint8_t decode_frame(decoder_s *d)
 {
+#ifdef DECODER_LOG
+    printf("[Decoder]: Decoding frame\n");
+#endif
     uint16_t len;
     fhdr *f = parse_fhdr(d->p, &len);
     if (f->p != 8 || f->nf > 3)
@@ -382,7 +461,7 @@ static uint8_t decode_frame(decoder_s *d)
     } 
     if (!f->y)
     {
-        printf("this decoder does not support this file\n");
+        printf("[Decoder]: This decoder does not support this file\n");
         free_fhdr(f);
         return 0;
     }
@@ -414,12 +493,12 @@ static uint8_t decode_frame(decoder_s *d)
     DL_FOREACH(f->comp, el)
     {
         compute_component_params(d, &d->comps[el->c - 1]);
-        #ifdef DUMP_COMPONENT_PARAMS
+        #ifdef DUMP_FRAME_HEADER
             printf("component %u\n", el->c);
             printf("h %u v %u tq %u\n", el->h, el->v, el->tq);
             component *comp = &d->comps[el->c - 1];
             printf("y %u x %u py %u px %u\n", comp->y, comp->x, comp->py, comp->px);
-            printf("blcy %U blcx %u mcuc %u\n", comp->blcy, comp->blcx, comp->mcuc);
+            printf("blcy %u blcx %u mcuc %u\n", comp->blcy, comp->blcx, comp->mcuc);
         #endif
     }
     free_fhdr(f);
@@ -434,13 +513,20 @@ static uint8_t decode_frame(decoder_s *d)
         }
         if(!decode_scan(d))
             return 0;
+#ifdef DECODER_LOG
+        printf("[Decoder]: Scan decoded\n");
+#endif
         marker = get_marker(d);
     }
     return 1; 
 }
 
+// this is the main image decoder function
 uint8_t decode_image(decoder *dec)
 {
+#ifdef DECODER_LOG
+    printf("[Decoder]: Decoding image\n");
+#endif
     decoder_s *d = (decoder_s *) dec;
     uint8_t *p = d->file->p;
     uint16_t marker = get_marker(d);
@@ -461,9 +547,20 @@ uint8_t decode_image(decoder *dec)
     return 0;
 }
 
+// free decoder resources
 void free_decoder(decoder *dec)
 {
     decoder_s *d = (decoder_s *) dec;
     close_file(d->file);
     free_tables(d->tables);        
+    for (uint8_t i = 0; i < 3; i++)
+    {
+        if (d->comps[i].blc)
+        {
+            for (uint32_t b = 0; b < d->comps[i].blc; b++)
+                free(d->comps[i].blocks[b]); 
+        }
+        free(d->comps[i].blocks);
+    }
+    free(dec);
 }

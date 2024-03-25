@@ -21,8 +21,6 @@ typedef struct
     uint16_t valptr[16];
 } hfft;
 
-#define DUMP_HUFFMAN
-
 hfft *extract_huffman_table(dht table);
 void free_huffman_table(hfft *t);
 
