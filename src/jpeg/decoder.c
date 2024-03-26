@@ -5,6 +5,7 @@
 
 #include <file.h>
 #include <mem.h>
+#include <threads.h>
 #include <jpeg/tables.h>
 #include <jpeg/parser.h>
 #include <jpeg/calculate.h>
@@ -63,6 +64,16 @@ typedef struct
     scan currscan; // current scan information
     image *img;
 } decoder_s;
+
+// thread parameter 
+typedef struct
+{
+    decoder_s *d; // decoder instance
+    uint8_t comp; // component to process
+    pthread_mutex_t *m; // mutex protecting rdy
+    pthread_cond_t *c; // condition variable associated with the mutex
+    volatile uint8_t *rdy; // how many threads are finished
+} decoder_tp;
 
 // calculate component properties which directly the decoding process
 static void compute_component_params(decoder_s *d, component *c)
@@ -613,29 +624,98 @@ static void build_color(decoder_s *d)
     d->img = img;
 }
 
-static uint8_t rebuild_image(decoder_s *d)
-{    
-    // obtain the pixel values from the decoded blocks
-    for (uint8_t i = 0; i < 3; i++)
+void *process_component(void *p)
+{
+    decoder_tp *arg = (decoder_tp *) p;
+    decoder_s *d = arg->d;
+    uint8_t comp = arg->comp;
+    pthread_mutex_t *m = arg->m;
+    pthread_cond_t *c = arg->c;
+    volatile uint8_t *rdy = arg->rdy;
+    
+    component *currc = &d->comps[comp];
+    int16_t *q = d->tables->quantization[currc->tq];
+    uint32_t blc = currc->blc;
+
+    if (blc)
     {
-        int16_t *q = d->tables->quantization[d->comps[i].tq];
-        if (d->comps[i].blc)
+        // allocate the matrices 
+        currc->m = alloc_matrices(blc, 8, 8);
+        // dequantize, unzigzag, idct and level shift
+        for (uint32_t b = 0; b < blc; b++)
+        {
+            int16_t *currbl = currc->blocks[b];
+            jpegf **currmat = currc->m->mat[b];
+            dequantize(currbl, q);
+            unzigzag(currbl, currmat);
+            idct(currmat);
+            undo_level_shift(currmat);
+        }
+    }
+    
+    pthread_mutex_lock(m);
+    *rdy += 1;
+    pthread_cond_signal(c); 
+    pthread_mutex_unlock(m);
+    return NULL;
+}
+
+static void obtainYCbCr(decoder_s *d)
+{
+    // if only one component no multithreading
+    if (d->nf == 1)
+    {
+        int16_t *q = d->tables->quantization[d->comps[0].tq];
+        if (d->comps[0].blc)
         {
             // allocate the matrices 
-            d->comps[i].m = alloc_matrices(d->comps[i].blc, 8, 8);
+            d->comps[0].m = alloc_matrices(d->comps[0].blc, 8, 8);
             // dequantize, unzigzag, idct and level shift
-            for (uint32_t b = 0; b < d->comps[i].blc; b++)
+            for (uint32_t b = 0; b < d->comps[0].blc; b++)
             {
-                int16_t *currbl = d->comps[i].blocks[b];
-                jpegf **currmat = d->comps[i].m->mat[b];
+                int16_t *currbl = d->comps[0].blocks[b];
+                jpegf **currmat = d->comps[0].m->mat[b];
                 dequantize(currbl, q);
                 unzigzag(currbl, currmat);
                 idct(currmat);
                 undo_level_shift(currmat);
             }
         }
-    } 
+        return;
+    }
+    // if 3 components do the multithreading, each thread decodes a component
+    pthread_mutex_t *m = mutex_create();
+    pthread_cond_t *c = cond_create();
+    pthread_t *t[3];
+    decoder_tp params[3];
+    uint8_t rdy = 0;
 
+    for (uint8_t i = 0; i < 3; i++)
+    {
+        params[i].d = d;
+        params[i].comp = i;
+        params[i].m = m;
+        params[i].c = c;
+        params[i].rdy = &rdy;
+        t[i] = thread_create(process_component, &params[i]);
+    }
+    
+    pthread_mutex_lock(m);
+    while (rdy < 3)
+        pthread_cond_wait(c, m);
+    pthread_mutex_unlock(m);
+    
+    for (uint8_t i = 0; i < 3; i++)
+        thread_free(t[i]);
+    mutex_free(m);
+    cond_free(c);
+}
+
+static uint8_t rebuild_image(decoder_s *d)
+{    
+    // obtain the pixel values from the decoded blocks
+    obtainYCbCr(d);
+    
     // we won't get rid of padding for now because it is not essential
     // we have YCbCr blocks for all components
     // we have to convert to RGB
