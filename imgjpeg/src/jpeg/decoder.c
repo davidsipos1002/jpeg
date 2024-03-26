@@ -763,8 +763,13 @@ uint8_t decode_image(decoder *dec)
     switch (marker)
     {
         case MRK(BDCT_SOF):
+        case MRK(ESDCT_SOF):
             d->mode = MODE_BDCT;
-            stat = decode_frame(d); 
+            stat = decode_frame(d);
+            break;
+        default:
+            stat = 0;
+            break;
     }
     if (stat)
         stat = rebuild_image(d);
