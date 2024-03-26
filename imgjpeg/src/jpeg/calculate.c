@@ -7,7 +7,7 @@
 
 // lookup tables
 
-static uint8_t fzigzag[8][8] = 
+static const uint8_t fzigzag[8][8] = 
 {
     0, 1, 5, 6, 14, 15, 27, 28,
     2, 4, 7, 13, 16, 26, 29, 42,
@@ -19,7 +19,7 @@ static uint8_t fzigzag[8][8] =
     35, 36, 48, 49, 57, 58, 62, 63
 };
 
-static uint8_t izigzag[] =
+static const uint8_t izigzag[] =
 {
 	// k = 0 i = 0 j = 0
 	0x0,
@@ -151,7 +151,7 @@ static uint8_t izigzag[] =
 	0x77,
 };
 
-static jpegf costable[8][8] = 
+static const jpegf icostable[8][8] = 
 {
 	1.000000, 0.980957, 0.923828, 0.831543, 0.707031, 0.555664, 0.382568, 0.195068, 
 	1.000000, 0.831543, 0.382568, -0.195068, -0.707031, -0.980957, -0.923828, -0.555664, 
@@ -161,6 +161,18 @@ static jpegf costable[8][8] =
 	1.000000, -0.555664, -0.382568, 0.980957, -0.707031, -0.195068, 0.923828, -0.831543, 
 	1.000000, -0.831543, 0.382568, 0.195068, -0.707031, 0.980957, -0.923828, 0.555664, 
 	1.000000, -0.980957, 0.923828, -0.831543, 0.707031, -0.555664, 0.382568, -0.195068, 
+};
+
+static const jpegf fcostable[8][8] = 
+{
+    1.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.000000, 1.000000, 
+    0.980957, 0.831543, 0.555664, 0.195068, -0.195068, -0.555664, -0.831543, -0.980957, 
+    0.923828, 0.382568, -0.382568, -0.923828, -0.923828, -0.382568, 0.382568, 0.923828, 
+    0.831543, -0.195068, -0.980957, -0.555664, 0.555664, 0.980957, 0.195068, -0.831543, 
+    0.707031, -0.707031, -0.707031, 0.707031, 0.707031, -0.707031, -0.707031, 0.707031, 
+    0.555664, -0.980957, 0.195068, 0.831543, -0.831543, -0.195068, 0.980957, -0.555664, 
+    0.382568, -0.923828, 0.923828, -0.382568, -0.382568, 0.923828, -0.923828, 0.382568, 
+    0.195068, -0.555664, 0.831543, -0.980957, 0.980957, -0.831543, 0.555664, -0.195068, 
 };
 
 static jpegf c[8] = {0.7071067812, 1, 1, 1, 1, 1, 1, 1};
@@ -193,13 +205,24 @@ void gen_inverse_zigzag()
 // this function generates the above cos table
 void gen_cos_table()
 {
-	printf("static jpegf costable[8][8] = \n");
+	printf("static jpegf icostable[8][8] = \n");
 	printf("{\n");
 	for (uint8_t i = 0; i < 8; i++)
 	{
 		printf("\t");
 		for (uint8_t j = 0; j < 8; j++)
 			printf("%f, ", (jpegf) cos((double) (2 * i + 1) * j * M_PI / 16));
+		printf("\n");
+	}
+	printf("};\n");
+
+	printf("static jpegf fcostable[8][8] = \n");
+	printf("{\n");
+	for (uint8_t i = 0; i < 8; i++)
+	{
+		printf("\t");
+		for (uint8_t j = 0; j < 8; j++)
+			printf("%f, ", (jpegf) cos((double) (2 * j + 1) * i * M_PI / 16));
 		printf("\n");
 	}
 	printf("};\n");
@@ -265,9 +288,9 @@ static jpegf idct_helper(jpegf **mat, uint8_t ii, uint8_t jj)
 	{
 		// load the values
 		rowc = vmovq_n_f16(c[i]);
-		rowcos = vmovq_n_f16(costable[ii][i]);
+		rowcos = vmovq_n_f16(icostable[ii][i]);
 		colc = vld1q_f16(c);	
-		colcos = vld1q_f16(costable[jj]);
+		colcos = vld1q_f16(icostable[jj]);
 		matrow = vld1q_f16(mat[i]);
 
 		// compute innersum elements
@@ -373,8 +396,8 @@ static jpegf get_round(jpegf x)
 #ifdef USE_NEON
 void convert_to_rgb(jpegf y, jpegf cb, jpegf cr, uint8_t *rp, uint8_t *gp, uint8_t *bp)
 {
-	static float16_t cbc[] = {0, -0.3441, 1.772, 0};
-	static float16_t crc[] = {1.402, -0.7141, 0, 0};
+	static const float16_t cbc[] = {0, -0.3441, 1.772, 0};
+	static const float16_t crc[] = {1.402, -0.7141, 0, 0};
 
 	float16x4_t cst = vmov_n_f16(128);
 	float16x4_t vy = vmov_n_f16(y);
@@ -420,6 +443,45 @@ void convert_to_rgb(jpegf y, jpegf cb, jpegf cr, uint8_t *rp, uint8_t *gp, uint8
 // Y = Min(Max(0,Round( 0.299*R +0.587*G +0.114*B )),255)
 // CB = Min(Max(0,Round(( −0.299*R −0.587*G +0.886*B )/1.772 +128 )),255)
 // CR = Min(Max(0,Round(( 0.701*R −0.587*G −0.114*B )/1.402 +128 )),255)
+#ifdef USE_NEON
+void convert_to_ycbcr(jpegf r, jpegf g, jpegf b, jpegf *yp, jpegf *cbp, jpegf *crp)
+{
+	static const float16_t cr[] = {0.299, -0.1687, 0.5, 0};
+	static const float16_t cg[]	= {0.587, -0.3313, -0.4187, 0};
+	static const float16_t cb[] = {0.114, 0.5, -0.0813, 0};
+	static const float16_t sh[] = {0, 128, 128, 0};
+	
+	// load values
+	float16x4_t vcr = vld1_f16(cr);
+	float16x4_t vcg = vld1_f16(cg);
+	float16x4_t vcb = vld1_f16(cb);
+	float16x4_t vsh = vld1_f16(sh);
+	float16x4_t vr = vmov_n_f16(r);
+	float16x4_t vg = vmov_n_f16(g);
+	float16x4_t vb = vmov_n_f16(b);
+	
+	// do the computation
+	vr = vmul_f16(vcr, vr);
+	vg = vmul_f16(vcg, vg);
+	vb = vmul_f16(vcb, vb);
+	
+	float16x4_t s = vadd_f16(vr, vg);
+	s = vadd_f16(s, vb);
+	s = vadd_f16(s, vsh);
+	s = vrnd_f16(s);
+	float16x4_t cst = vmov_n_f16(0);
+	s = vmax_f16(cst, s);
+	cst = vmov_n_f16(255);
+	s = vmin_f16(s, cst);
+	
+	// get the result
+	float16_t res[4];
+	vst1_f16(res, s);
+	*yp = res[0];
+	*cbp = res[1];
+	*crp = res[2];
+}
+#else
 void convert_to_ycbcr(jpegf r, jpegf g, jpegf b, jpegf *yp, jpegf *cbp, jpegf *crp)
 {
 	jpegf y = get_min(get_max(0, get_round(0.299 * r + 0.587 * g + 0.114 * b)), 255);
@@ -429,8 +491,42 @@ void convert_to_ycbcr(jpegf r, jpegf g, jpegf b, jpegf *yp, jpegf *cbp, jpegf *c
 	*cbp = cb;
 	*crp = cr;
 }
+#endif
 
 // defined in Annex A 3.3 of the standard
+#ifdef USE_NEON
+static jpegf fdct_helper(jpegf **mat, uint8_t ii, uint8_t jj)
+{
+	float16x8_t crow = vmovq_n_f16(c[ii]);	
+	float16x8_t ccol = vmovq_n_f16(c[jj]);	
+	float16x8_t sumcol = vmovq_n_f16(0);
+	float16x8_t part;
+	float16_t r[4];
+
+	// compute the innermost sum per column
+	for (uint8_t i = 0; i < 8; i++)
+	{
+		float16x8_t rowcos = vmovq_n_f16(fcostable[ii][i]);
+		float16x8_t colcos = vld1q_f16(fcostable[jj]);
+		float16x8_t matrow = vld1q_f16(mat[i]);
+		
+		part = vmulq_f16(crow, ccol);
+		part = vmulq_f16(part, matrow);
+		part = vmulq_f16(part, rowcos);	
+		part = vmulq_f16(part, colcos);
+		 
+		sumcol = vaddq_f16(sumcol, part);
+	}
+	
+	float16x4_t hsumcol = vget_high_f16(sumcol);
+	float16x4_t lsumcol = vget_low_f16(sumcol); 
+	float16x4_t sum = vadd_f16(lsumcol, hsumcol);
+	vst1_f16(r, sum);
+	
+	float16_t ret = r[0] + r[1] + r[2] + r[3];
+	return ret / 4;
+}
+#else
 static jpegf fdct_helper(jpegf **mat, uint8_t ii, uint8_t jj)
 {
 	jpegf ret = 0;
@@ -438,14 +534,15 @@ static jpegf fdct_helper(jpegf **mat, uint8_t ii, uint8_t jj)
 	{
 		for (uint8_t j = 0; j < 8; j++)
 		{
-			jpegf cosi = costable[i][ii];	
-			jpegf cosj = costable[j][jj];	
+			jpegf cosi = icostable[i][ii];	
+			jpegf cosj = icostable[j][jj];	
 			ret += c[ii] * c[jj] * mat[i][j] * cosi * cosj;
 		}
 	}	
 	ret /= 4;
 	return ret;
 }
+#endif
 
 void fdct(jpegf **mat)
 {
@@ -458,6 +555,7 @@ void fdct(jpegf **mat)
 			mat[i][j] = res[i][j];
 }
 
+
 void zigzag(jpegf **mat, int16_t *b)
 {
 	for (uint8_t i = 0; i < 8; i++)
@@ -465,8 +563,33 @@ void zigzag(jpegf **mat, int16_t *b)
 			b[fzigzag[i][j]] = mat[i][j];	
 }
 
+#ifdef USE_NEON
+void quantize (int16_t *b, int16_t *q)
+{
+	for (uint8_t i = 0; i < 8; i++)
+	{
+		int16_t *bp = b + i * 8;
+		int16_t *qp = q + i * 8;
+
+		// load the integers
+		int16x8_t ivb = vld1q_s16(bp);
+		int16x8_t ivq = vld1q_s16(qp);
+		// convert to float
+		float16x8_t fvb = vcvtq_f16_s16(ivb);
+		float16x8_t fvq = vcvtq_f16_s16(ivq);
+		// do the quantization
+		fvb = vdivq_f16(fvb, fvq);
+		fvb = vrndq_f16(fvb);
+		// convert to int
+		ivb = vcvtq_s16_f16(fvb);
+		// store the result
+		vst1q_s16(bp, ivb);
+	}
+}
+#else
 void quantize(int16_t *b, int16_t *q)
 {
 	for (uint8_t i = 0; i < 64; i++)
 		b[i] = get_round((jpegf) b[i] / q[i]);
 }
+#endif

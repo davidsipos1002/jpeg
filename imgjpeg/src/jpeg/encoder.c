@@ -290,6 +290,7 @@ static void write_sos(encoder_s *e)
     fwrite(scan_header, sizeof(scan_header), 1, e->f);
 }
 
+// calculate padding
 static void pad_component(encoder_s *e, uint8_t **comp, uint8_t c)
 {
     arrmat *m = alloc_matrices(e->blc, 8, 8);
@@ -318,6 +319,7 @@ static void pad_component(encoder_s *e, uint8_t **comp, uint8_t c)
     e->bl[c] = m;
 }
 
+// convert components to ycbcr and perform level shift
 static void convert_components(encoder_s *e)
 {
     for (uint32_t b = 0; b < e->blc; b++)
@@ -344,6 +346,7 @@ static void convert_components(encoder_s *e)
     }
 }
 
+// prepare blocks for the entropy encoding
 static void prepare_component(encoder_s *e, uint8_t comp, uint8_t chroma)
 {
     safeMalloc(e->datau[comp], e->blc * sizeof(int16_t *));
@@ -364,6 +367,7 @@ static void prepare_for_entropy_coding(encoder_s *e)
     prepare_component(e, 2, 1);
 }
 
+// use decoder functions to generate the encoder Huffman tables
 static void load_huffman(encoder_s *e)
 {
     dhtt currtbl;
@@ -372,7 +376,6 @@ static void load_huffman(encoder_s *e)
     hfft *hft;
     // load Luma tables 
 
-    printf("loading huffman in the encoder\n"); 
     // Luma DC tc = 0 th = 0
     currtbl.tc = 0;
     currtbl.th = 0;
@@ -412,6 +415,7 @@ static void load_huffman(encoder_s *e)
     e->tbl[2][1] = hft;
 }
 
+// output a bit to the file, takes into consideration byte stuffing
 static void writebit(encoder_s *e, uint8_t bit)
 {
     static const uint8_t zero = 0x00;
@@ -427,6 +431,7 @@ static void writebit(encoder_s *e, uint8_t bit)
     e->cnt++;
 }
 
+// get the value category of x
 static uint8_t get_cat(int16_t x, int16_t mxcat)
 {
     if (!x)
@@ -442,6 +447,7 @@ static uint8_t get_cat(int16_t x, int16_t mxcat)
     return mxcat;
 }
 
+// append count bits of x to the file starting from left and going to the right
 static void write_bits(encoder_s *e, uint16_t x, uint8_t count)
 {
     // this not expected by the function
@@ -455,6 +461,7 @@ static void write_bits(encoder_s *e, uint16_t x, uint8_t count)
     }
 }
 
+// encode a DC coefficient
 static void encode_dc(encoder_s *e, uint8_t comp, int16_t diff)
 {
     hfft *h = e->tbl[comp][0];
@@ -471,6 +478,7 @@ static void encode_dc(encoder_s *e, uint8_t comp, int16_t diff)
     }
 }
 
+// encode an AC coefficient
 static void encode_ac(encoder_s *e, uint8_t comp, uint8_t r, int16_t ac)
 {
     hfft *h = e->tbl[comp][1];
@@ -485,6 +493,7 @@ static void encode_ac(encoder_s *e, uint8_t comp, uint8_t r, int16_t ac)
     write_bits(e, x, cat);
 }
 
+// write one of the special values ZRL (0xF0) or EOB (0x00) to the file
 static void write_special(encoder_s *e, uint8_t comp, uint8_t val)
 {
     assert(val == 0x00 || val == 0xF0);
@@ -494,6 +503,7 @@ static void write_special(encoder_s *e, uint8_t comp, uint8_t val)
     write_bits(e, code, sz);
 }
 
+// do the entropy encoding and also interleave the components in the scan
 static void entropy_encode(encoder_s *e)
 {
     for (uint32_t b = 0; b < e->blc; b++)
@@ -544,6 +554,7 @@ static void entropy_encode(encoder_s *e)
         writebit(e, 0);
 }
 
+// encode an image
 uint8_t encode_image(encoder *enc)
 {
     static uint8_t encoder_app0[] = 
@@ -626,6 +637,7 @@ uint8_t encode_image(encoder *enc)
     return 1;
 }
 
+// free encoder resources
 void free_encoder(encoder *enc)
 {
     encoder_s *e = (encoder_s *) enc;
