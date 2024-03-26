@@ -31,6 +31,9 @@ void free_fhdr(fhdr *fhdr);
 shdr *parse_shdr(uint8_t *p, uint16_t *l);
 void free_shdr(shdr *s);
 
+// verify JFIF
+uint8_t parse_app0(uint8_t *p, uint16_t *l);
+
 uint16_t get_marker_seg_len(uint8_t *p);
 
 END_C_DECLS

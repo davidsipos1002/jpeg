@@ -25,7 +25,12 @@ void dumpComponent(std::ofstream &out, uint16_t rows, uint16_t cols, uint8_t **c
 void decodeImage(const std::string &source, const std::string &destination)
 {
     decoder *d = init_decoder(source.c_str());
-    decode_image(d);
+    if (!decode_image(d))
+    {
+        free_decoder(d);
+        std::cout << "Failed to decode image!" << std::endl;
+        return;
+    }
     image *img = get_image(d);
     free_decoder(d);
 

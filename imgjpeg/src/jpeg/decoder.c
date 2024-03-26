@@ -137,12 +137,13 @@ static uint16_t get_marker(decoder_s *d)
 // interpret markers: DHT (define huffman table), DQT (define quantization table)
 // DRI (define restart interval)
 // for any other marker jump over it
-static void interpret_markers(decoder_s *d, uint16_t marker)
+static uint8_t interpret_markers(decoder_s *d, uint16_t marker)
 {
 #ifdef DECODER_LOG
     printf("[Decoder]: Interpreting marker %x\n", marker);
 #endif
     uint16_t len;
+    uint8_t stat = 1;
     switch (marker)
     {
         case MRK(DHT): 
@@ -171,6 +172,11 @@ static void interpret_markers(decoder_s *d, uint16_t marker)
             d->ril = parse_dri(d->p, &len);
             break;
         }
+        case MRK(APP(0)):
+        {
+            stat = parse_app0(d->p, &len);
+            break;
+        }
         default:
         {
             len = get_marker_seg_len(d->p);
@@ -178,6 +184,7 @@ static void interpret_markers(decoder_s *d, uint16_t marker)
         }
     }
     d->p += len;
+    return stat;
 }
 
 // extend the sign bit of a decoded value V 
@@ -526,7 +533,8 @@ static uint8_t decode_frame(decoder_s *d)
     {
         while (marker != MRK(SOS))
         {
-            interpret_markers(d, marker);
+            if(!interpret_markers(d, marker))
+                return 0;
             marker = get_marker(d); 
         }
         if(!decode_scan(d))
@@ -747,7 +755,8 @@ uint8_t decode_image(decoder *dec)
     marker = get_marker(d); 
     while (marker != MRK(BDCT_SOF) && marker != MRK(ESDCT_SOF) && marker != MRK(EPDCT_SOF))
     {
-        interpret_markers(d, marker);
+        if(!interpret_markers(d, marker))
+            return 0;
         marker = get_marker(d);
     }
     uint8_t stat = 0;
@@ -774,19 +783,24 @@ void free_decoder(decoder *dec)
 {
     decoder_s *d = (decoder_s *) dec;
     close_file(d->file);
-    free_tables(d->tables);        
+    if (d->tables)
+        free_tables(d->tables);        
     // free matrices
     for (uint8_t i = 0; i < 3; i++)
     {
         if (d->comps[i].blc)
         {
-            free_matrices(d->comps[i].m);
-            for (uint32_t b = 0; b < d->comps[i].blc; b++)
-                free(d->comps[i].blocks[b]); 
-            free(d->comps[i].blocks);
+            if (d->comps[i].m)
+                free_matrices(d->comps[i].m);
+            if (d->comps[i].blocks)
+            {
+                free(d->comps[i].blocks);
+                for (uint32_t b = 0; b < d->comps[i].blc; b++)
+                    free(d->comps[i].blocks[b]); 
+            }
         }
     }
-    if (!d->gotimg)
+    if (!d->gotimg && d->img)
         free_image(d->img);
     free(d);
 }

@@ -223,6 +223,23 @@ void free_shdr(shdr *s)
     free(s);
 }
 
+uint8_t parse_app0(uint8_t *p, uint16_t *l)
+{
+    uint16_t lp;
+    TO_UINT_ADVANCE(uint16_t, lp, p);
+    lp = ENDIAN_SWAP(lp);
+    *l = lp;
+    lp -= sizeof(uint16_t); 
+    char id[5];
+    for (uint8_t i = 0; i < 5; i++)
+    {
+        TO_UINT_ADVANCE(uint8_t, id[i], p);
+    }
+    if (strcmp("JFIF", id))
+        return 0;
+    return 1;
+}
+
 uint16_t get_marker_seg_len(uint8_t *p)
 {
     uint16_t ret;
