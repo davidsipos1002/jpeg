@@ -25,6 +25,7 @@ void dumpComponent(std::ofstream &out, uint16_t rows, uint16_t cols, uint8_t **c
 
 void decodeImage(const std::string &source, const std::string &destination)
 {
+    // run the decoder
     decoder *d = init_decoder(source.c_str());
     if (!decode_image(d))
     {
@@ -76,46 +77,86 @@ void decodeImage(const std::string &source, const std::string &destination)
     free_image(img);
 }
 
-void encodeImage()
+void encodeImage(const std::string &source, const std::string &destination, uint8_t quality)
 {
-    decoder *d = init_decoder("img/everest_sub.jpg");
-    decode_image(d);
-    image *img = get_image(d);
-    free_decoder(d);
-    encoder *e = init_encoder("test.jpg", img, JPEG_QUALITY_100);
-    encode_image(e);
+    // read image
+    cv::Mat src = cv::imread(source, cv::IMREAD_COLOR);
+
+    // build the image structure for the encoder
+    image *img = init_image(src.rows, src.cols);
+    for (uint16_t i = 0; i < src.rows; i++)
+    {
+        for (uint16_t j = 0; j < src.cols; j++)
+        {
+            const cv::Vec3b &p = src.at<cv::Vec3b>(i, j);
+            img->b[i][j] = p[0];
+            img->g[i][j] = p[1];
+            img->r[i][j] = p[2];
+        }
+    }
+    
+    // run the encoder
+    uint8_t q = 0;
+    switch (quality)
+    {
+        case 100:
+            q = JPEG_QUALITY_100;
+            break;
+        case 80:
+            q = JPEG_QUALITY_80;
+            break;
+        case 50:
+            q = JPEG_QUALITY_50;
+            break;
+    }
+    encoder *e = init_encoder(destination.c_str(), img, q);
+    uint8_t stat = encode_image(e);
     free_encoder(e);
+    if (!stat)
+        std::cout << "Failed to encode image!" << std::endl;
+    free_image(img);
 }
 
 int main()
 {
-    // char c;
-    // while (true)
-    // {
-    //     std::cout << "Select between d (decode), e (encode), x (exit) : ";
-    //     std::cin >> c;
+    char c;
+    while (true)
+    {
+        std::cout << "Select between d (decode), e (encode), x (exit) : ";
+        std::cin >> c;
         
-    //     if (c == 'x')
-    //         break;
-    //     if (c == 'e')
-    //     {
-    //         std::cout << "Encoding not supported!" << std::endl;
-    //         continue;
-    //     }
-
-    //     std::cout << "Select source file for decoding" << std::endl;
-    //     std::string src = FileUtil::getSingleFileAbsPath();
-    //     if (src.empty())
-    //     {
-    //         std::cout << "File not selected!" << std::endl;
-    //          continue;
-    //     }
-    //     std::cout << "Do you want to dump the pixel values ? (y/n) ";
-    //     std::cin >> c;
-    //     std::filesystem::path path(src);
-    //     std::string dst = c == 'y' ? path.filename().string() + ".dump" : "";
-    //     decodeImage(src, dst);
-    // }
-    encodeImage();
+        if (c == 'x')
+            break;
+        std::cout << "Select source file" << std::endl;
+        std::string src = FileUtil::getSingleFileAbsPath();
+        if (src.empty())
+        {
+            std::cout << "File not selected!" << std::endl;
+            continue;
+        }
+        std::filesystem::path path(src);
+        std::string dst = path.filename().string();
+        dst = c == 'e' ? dst + "-encoded.jpg" : dst + ".dump";
+        if (c == 'd')
+        {
+            std::cout << "Do you want to dump the pixel values ? (y/n) ";
+            std::cin >> c;
+            if (c == 'n')
+                dst = "";
+            decodeImage(src, dst);
+        }
+        else
+        {
+            std::cout << "Enter quality (50, 80, 100): ";
+            int q;
+            std::cin >> q;
+            if (q != 50 && q != 80 && q != 100)
+            {
+                std::cout << "Invalid quality!" << std::endl;
+                continue;
+            }
+            encodeImage(src, dst, static_cast<uint8_t>(q));
+        }
+    }
     return 0;
 }
