@@ -11,7 +11,7 @@ typedef struct
     uint32_t count;
     uint32_t row;
     uint32_t col;
-    float ***mat;
+    jpegf ***mat;
 } arrmat;
 
 arrmat *alloc_matrices(uint32_t count, uint32_t row, uint32_t col);

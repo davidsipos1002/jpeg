@@ -59,13 +59,13 @@ dqt *parse_dqt(uint8_t *p, uint16_t *l)
         t->pq = *p >> 4;
         t->tq = *p & 0xF;
         p++;
-        uint16_t qsize = 64 * (sizeof(uint8_t) + t->pq * sizeof(uint8_t));
+        uint16_t qsize = 64 * sizeof(int16_t);
         safeMalloc(t->q, qsize); 
-        memcpy(t->q, p, qsize);
+        for (uint8_t i = 0; i < 64; i++)
+            t->q[i] = *(p++);
         if (t->pq)
             endian_swap_dqt((uint16_t *) t->q);
         DL_APPEND(ret, t);
-        p += qsize;
 
 #ifdef DUMP_QUANTIZATION
         printf("----- QUANTIZATION TABLE -----\n");

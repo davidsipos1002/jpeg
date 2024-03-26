@@ -81,7 +81,7 @@ typedef struct _dqt
 {
     uint8_t pq; // quantization table element precision
     uint8_t tq; // quantization table destination identifier
-    uint8_t *q; // quantization table
+    int16_t *q; // quantization table
     struct _dqt *next;
     struct _dqt *prev;
 } dqt;

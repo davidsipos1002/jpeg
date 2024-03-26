@@ -50,6 +50,8 @@
         "decoder.h": "c",
         "memory.h": "c",
         "calculate.h": "c",
-        "mem.h": "c"
+        "mem.h": "c",
+        "arm_neon.h": "c",
+        "tables.h": "c"
     },
 }

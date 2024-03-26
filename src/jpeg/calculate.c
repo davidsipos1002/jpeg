@@ -2,6 +2,7 @@
 
 #include <math.h>
 #include <stdlib.h>
+#include <mem.h>
 
 static uint8_t zigzag[8][8] = 
 {
@@ -175,13 +176,49 @@ void gen_inverse_zigzag()
     printf("};\n");
 }
 
-void dequantize(int16_t *b, uint8_t *q)
+// this function generates the above cos table
+void gen_cos_table()
 {
-	for (uint8_t i = 0; i < 64; i++)
-		b[i] *= (int16_t) q[i];
+	printf("#ifdef __aarch64__\n");
+	printf("static float16_t costable[8][8] = \n");
+	printf("{\n");
+	for (uint8_t i = 0; i < 8; i++)
+	{
+		for (uint8_t j = 0; j < 8; j++)
+		{	
+		}
+	}
+	printf("};\n");
+	printf("#endif");
 }
 
-void unzigzag(int16_t *b, float **mat)
+#ifdef __aarch64__
+void dequantize(int16_t *b, int16_t *q)
+{
+	// we will do the multiplication using ARM Neon
+	// we split the input in 8 integer blocks
+	for (uint8_t i = 0; i < 8; i++)
+	{
+		int16_t *bp = b + i * 8;
+		int16_t *qp = q + i * 8;
+		// load the elements in of the 128-bit Q registers
+		int16x8_t vb = vld1q_s16(bp);
+		int16x8_t vq = vld1q_s16(qp);
+		// do the multiplication
+		int16x8_t vdq = vmulq_s16(vb, vq);
+		// store the result
+		vst1q_s16(bp, vdq);
+	}
+}
+#else
+void dequantize(int16_t *b, int16_t *q)
+{
+	for (uint8_t i = 0; i < 64; i++)
+		b[i] *= q[i];
+}
+#endif
+
+void unzigzag(int16_t *b, jpegf **mat)
 {
 	for (uint8_t i = 0; i < 64; i++)
 	{
@@ -190,17 +227,17 @@ void unzigzag(int16_t *b, float **mat)
 	}
 }
 
-static float idct_helper(float **mat, uint8_t ii, uint8_t jj)
+static jpegf idct_helper(jpegf **mat, uint8_t ii, uint8_t jj)
 {
 	float ret = 0;
 	for (uint8_t i = 0; i < 8; i++)
 	{
 		for (uint8_t j = 0; j < 8; j++)
 		{
-			float ci = i == 0 ? (1 / sqrt(2)) : 1; 
-			float cj = j == 0 ? (1 / sqrt(2)) : 1;	
-			float cosi = cos((double) (2 * ii + 1) * i * M_PI / 16);
-			float cosj = cos((double) (2 * jj + 1) * j * M_PI / 16);
+			jpegf ci = i == 0 ? (1 / sqrt(2)) : 1; 
+			jpegf cj = j == 0 ? (1 / sqrt(2)) : 1;	
+			jpegf cosi = cos((double) (2 * ii + 1) * i * M_PI / 16);
+			jpegf cosj = cos((double) (2 * jj + 1) * j * M_PI / 16);
 			ret += ci * cj * mat[i][j] * cosi * cosj;
 		}
 	}
@@ -209,7 +246,7 @@ static float idct_helper(float **mat, uint8_t ii, uint8_t jj)
 }
 
 // defined in Annex A 3.3 of the standard
-void idct(float **mat)
+void idct(jpegf **mat)
 {
 	float res[8][8];
 	for (uint8_t i = 0; i < 8; i++)
@@ -220,21 +257,21 @@ void idct(float **mat)
 			mat[i][j] = res[i][j];
 }
 
-void undo_level_shift(float **mat)
+void undo_level_shift(jpegf **mat)
 {
 	for (uint8_t i = 0; i < 8; i++)
 		for (uint8_t j = 0; j < 8; j++)
 			mat[i][j] += 128;
 }
 
-static float get_min(float x, float y)
+static jpegf get_min(jpegf x, jpegf y)
 {
 	if (x < y)
 		return x;
 	return y;
 }
 
-static float get_max(float x, float y)
+static jpegf get_max(jpegf x, jpegf y)
 {
 	if (x < y)
 		return y;
@@ -242,7 +279,7 @@ static float get_max(float x, float y)
 }
 
 // defined in JFIF standard
-static float get_round(float x)
+static jpegf get_round(jpegf x)
 {
 	return floor(x + 0.5);
 }
@@ -251,11 +288,11 @@ static float get_round(float x)
 // R = Min(Max(0,Round(Y +1.402*(CR −128) )),255)
 // G = Min(Max(0,Round(Y −(0.114*1.772*(CB −128)+0.299*1.402*(CR −128))/0.587)),255)
 // B = Min(Max(0,Round(Y +1.772*(CB −128) )),255)
-void convert_to_rgb(float y, float cb, float cr, uint8_t *rp, uint8_t *gp, uint8_t *bp)
+void convert_to_rgb(jpegf y, jpegf cb, jpegf cr, uint8_t *rp, uint8_t *gp, uint8_t *bp)
 {
-	float r = get_min(get_max(0, get_round(y + 1.402 * (cr - 128))), 255); 	
-	float g = get_min(get_max(0, get_round(y - (0.114 * 1.772 * (cb - 128) + 0.299 * 1.402 * (cr - 128))/0.587)), 255);
-	float b = get_min(get_max(0, get_round(y + 1.772 * (cb - 128))), 255);
+	jpegf r = get_min(get_max(0, get_round(y + 1.402 * (cr - 128))), 255); 	
+	jpegf g = get_min(get_max(0, get_round(y - (0.114 * 1.772 * (cb - 128) + 0.299 * 1.402 * (cr - 128))/0.587)), 255);
+	jpegf b = get_min(get_max(0, get_round(y + 1.772 * (cb - 128))), 255);
 	*rp = (uint8_t) r;
 	*gp = (uint8_t) g;
 	*bp = (uint8_t) b;

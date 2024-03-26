@@ -9,7 +9,7 @@ typedef struct
 {
     hfft *huffman_dc[4];
     hfft *huffman_ac[4];
-    uint8_t *quantization[4];
+    int16_t *quantization[4];
 } tables;
 
 tables *init_tables();

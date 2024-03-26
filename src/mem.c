@@ -4,14 +4,14 @@
 
 arrmat *alloc_matrices(uint32_t count, uint32_t row, uint32_t col)
 {
-    uint32_t matsize = count * row * col * sizeof(float);
-    float *store;
+    uint32_t matsize = count * row * col * sizeof(jpegf);
+    jpegf *store;
     safeMalloc(store, matsize);
     memset(store, 0, matsize);
-    float ***mats;
-    safeMalloc(mats, count * sizeof(float **));
+    jpegf ***mats;
+    safeMalloc(mats, count * sizeof(jpegf **));
     for (uint32_t i = 0; i < count; i++)
-        safeMalloc(mats[i], row * sizeof(float *));
+        safeMalloc(mats[i], row * sizeof(jpegf *));
     for (uint32_t i = 0; i < count; i++)
         for (uint32_t j = 0; j < row; j++)
             mats[i][j] = &store[i * row * col + j * row]; 
@@ -26,7 +26,7 @@ arrmat *alloc_matrices(uint32_t count, uint32_t row, uint32_t col)
 
 void free_matrices(arrmat *p)
 {
-    float *store = p->mat[0][0];
+    jpegf *store = p->mat[0][0];
     free(store);
     for (uint32_t i = 0; i < p->count; i++)
         free(p->mat[i]);

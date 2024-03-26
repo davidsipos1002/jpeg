@@ -23,11 +23,11 @@ void install_quantization_table(tables *t, dqt *q)
         printf("only 8-bit images are supported\n");
         exit(1);
     }
-    uint8_t **ts = t->quantization;
+    int16_t **ts = t->quantization;
     if (ts[q->tq])
         free(ts[q->tq]);
-    safeMalloc(ts[q->tq], 64 * sizeof(uint8_t));
-    memcpy(ts[q->tq], q->q, 64 * sizeof(uint8_t));
+    safeMalloc(ts[q->tq], 64 * sizeof(int16_t));
+    memcpy(ts[q->tq], q->q, 64 * sizeof(int16_t));
 }
 
 void free_tables(tables *t)

@@ -3,6 +3,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#ifdef __aarch64__
+#include <arm_neon.h>
+#endif
+
 #define PACKED __attribute__((packed))
 #define INLINE __attribute__((always_inline))
 #define ENDIAN_SWAP(x) (__builtin_bswap16(x))
@@ -27,6 +31,12 @@ do                                 \
 #endif
 
 BEGIN_C_DECLS
+
+#ifdef __aarch64__
+    typedef float16_t jpegf;
+#else
+    typedef float jpegf;
+#endif
 
 static inline void print_binary16(uint16_t x)
 {

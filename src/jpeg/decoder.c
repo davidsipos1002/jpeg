@@ -560,7 +560,7 @@ static void build_grayscale(decoder_s *d)
 
 // extract value corresponding to iimg and jimg image position 
 // from a potentially subsampled component
-static float get_subsampled_component_value(uint32_t rows, uint32_t cols, 
+static jpegf get_subsampled_component_value(uint32_t rows, uint32_t cols, 
                                             uint32_t iimg, uint32_t jimg, component *comp)
 {
     uint32_t ifactor = rows / (comp->blcy * 8);
@@ -585,7 +585,7 @@ static void build_color(decoder_s *d)
     uint32_t bi = d->comps[0].blcy;
     uint32_t bj = d->comps[0].blcx;
     uint32_t bndx = 0;
-    float y, cb, cr;
+    jpegf y, cb, cr;
     uint8_t r, g, b;
     
     for (uint32_t ii = 0; ii < bi; ii++)
@@ -598,9 +598,9 @@ static void build_color(decoder_s *d)
                 {
                     uint32_t iimg = ii * 8 + i;
                     uint32_t jimg = jj * 8 + j;
-                    float y = d->comps[0].m->mat[bndx][i][j];
-                    float cb = get_subsampled_component_value(rows, cols, iimg, jimg, &d->comps[1]); 
-                    float cr = get_subsampled_component_value(rows, cols, iimg, jimg, &d->comps[2]);
+                    jpegf y = d->comps[0].m->mat[bndx][i][j];
+                    jpegf cb = get_subsampled_component_value(rows, cols, iimg, jimg, &d->comps[1]); 
+                    jpegf cr = get_subsampled_component_value(rows, cols, iimg, jimg, &d->comps[2]);
                     convert_to_rgb(y, cb, cr, &r, &g, &b);
                     img->r[ii * 8 + i][jj * 8 + j] = r;
                     img->g[ii * 8 + i][jj * 8 + j] = g;
@@ -618,7 +618,7 @@ static uint8_t rebuild_image(decoder_s *d)
     // obtain the pixel values from the decoded blocks
     for (uint8_t i = 0; i < 3; i++)
     {
-        uint8_t *q = d->tables->quantization[d->comps[i].tq];
+        int16_t *q = d->tables->quantization[d->comps[i].tq];
         if (d->comps[i].blc)
         {
             // allocate the matrices 
@@ -627,7 +627,7 @@ static uint8_t rebuild_image(decoder_s *d)
             for (uint32_t b = 0; b < d->comps[i].blc; b++)
             {
                 int16_t *currbl = d->comps[i].blocks[b];
-                float **currmat = d->comps[i].m->mat[b];
+                jpegf **currmat = d->comps[i].m->mat[b];
                 dequantize(currbl, q);
                 unzigzag(currbl, currmat);
                 // free the block as it is not needed anymore

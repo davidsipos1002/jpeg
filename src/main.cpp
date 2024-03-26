@@ -1,6 +1,7 @@
 #include <iostream>
 
 #include <jpeg/decoder.h>
+#include <jpeg/calculate.h>
 
 int main()
 {
