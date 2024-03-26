@@ -3,3 +3,6 @@ build/
 out.log
 block.bl
 *.dump
+test.bin
+test.jpg
+test.jpeg

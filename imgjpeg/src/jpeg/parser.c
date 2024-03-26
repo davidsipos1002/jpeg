@@ -70,20 +70,10 @@ dqt *parse_dqt(uint8_t *p, uint16_t *l)
 #ifdef DUMP_QUANTIZATION
         printf("----- QUANTIZATION TABLE -----\n");
         printf("precision %u destination %u\n", t->pq, t->tq);
-        if (t->pq)
-        {
-            uint16_t *table = (uint16_t *) t->q;
-            for (uint8_t i = 0; i < 64; i++)
-                printf("%u ", table[i]);
-            printf("\n");
-        }
-        else
-        {
-            uint8_t *table = (uint8_t *) t->q;
-            for (uint8_t i = 0; i < 64; i++)
-                printf("%u ", table[i]);
-            printf("\n");
-        }
+        int16_t *table = (int16_t *) t->q;
+        for (uint8_t i = 0; i < 64; i++)
+            printf("%d ", table[i]);
+        printf("\n");
 #endif
     }
    

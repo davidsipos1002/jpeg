@@ -7,7 +7,7 @@
 
 // lookup tables
 
-static uint8_t zigzag[8][8] = 
+static uint8_t fzigzag[8][8] = 
 {
     0, 1, 5, 6, 14, 15, 27, 28,
     2, 4, 7, 13, 16, 26, 29, 42,
@@ -177,7 +177,7 @@ void gen_inverse_zigzag()
         {
             for (int j = 0; j < 8; j++)
             {
-                if (zigzag[i][j] == k)
+                if (fzigzag[i][j] == k)
                 {
                     pi = i;
                     pj = j;
@@ -241,7 +241,6 @@ void unzigzag(int16_t *b, jpegf **mat)
 }
 
 #ifdef USE_NEON
-// defined in Annex A 3.3 of the standard
 static jpegf idct_helper(jpegf **mat, uint8_t ii, uint8_t jj)
 {
 	// row normalization constants
@@ -416,3 +415,58 @@ void convert_to_rgb(jpegf y, jpegf cb, jpegf cr, uint8_t *rp, uint8_t *gp, uint8
 	*bp = (uint8_t) b;
 }
 #endif
+
+// formulas taken from the JFIF standard
+// Y = Min(Max(0,Round( 0.299*R +0.587*G +0.114*B )),255)
+// CB = Min(Max(0,Round(( −0.299*R −0.587*G +0.886*B )/1.772 +128 )),255)
+// CR = Min(Max(0,Round(( 0.701*R −0.587*G −0.114*B )/1.402 +128 )),255)
+void convert_to_ycbcr(jpegf r, jpegf g, jpegf b, jpegf *yp, jpegf *cbp, jpegf *crp)
+{
+	jpegf y = get_min(get_max(0, get_round(0.299 * r + 0.587 * g + 0.114 * b)), 255);
+	jpegf cb = get_min(get_max(0, get_round((-0.299 * r - 0.587 * g + 0.886 * b) / 1.772 + 128)), 255);
+	jpegf cr = get_min(get_max(0, get_round((0.701 * r - 0.587 * g - 0.114 * b) / 1.402 + 128)), 255);
+	*yp = y;
+	*cbp = cb;
+	*crp = cr;
+}
+
+// defined in Annex A 3.3 of the standard
+static jpegf fdct_helper(jpegf **mat, uint8_t ii, uint8_t jj)
+{
+	jpegf ret = 0;
+	for (uint8_t i = 0; i < 8; i++)
+	{
+		for (uint8_t j = 0; j < 8; j++)
+		{
+			jpegf cosi = costable[i][ii];	
+			jpegf cosj = costable[j][jj];	
+			ret += c[ii] * c[jj] * mat[i][j] * cosi * cosj;
+		}
+	}	
+	ret /= 4;
+	return ret;
+}
+
+void fdct(jpegf **mat)
+{
+	jpegf res[8][8];
+	for (uint8_t i = 0; i < 8; i++)
+		for (uint8_t j = 0; j < 8; j++)
+			res[i][j] = fdct_helper(mat, i, j);
+	for (uint8_t i = 0; i < 8; i++)
+		for (uint8_t j = 0; j < 8; j++)
+			mat[i][j] = res[i][j];
+}
+
+void zigzag(jpegf **mat, int16_t *b)
+{
+	for (uint8_t i = 0; i < 8; i++)
+		for (uint8_t j = 0; j < 8; j++)
+			b[fzigzag[i][j]] = mat[i][j];	
+}
+
+void quantize(int16_t *b, int16_t *q)
+{
+	for (uint8_t i = 0; i < 64; i++)
+		b[i] = get_round((jpegf) b[i] / q[i]);
+}

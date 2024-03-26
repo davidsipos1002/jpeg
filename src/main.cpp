@@ -9,8 +9,9 @@
 #include <FileUtil.hpp>
 #include <ImageUtil.hpp>
 
-#include <jpeg/decoder.h>
 #include <jpeg/image.h>
+#include <jpeg/decoder.h>
+#include <jpeg/encoder.h>
 
 void dumpComponent(std::ofstream &out, uint16_t rows, uint16_t cols, uint8_t **comp)
 {
@@ -75,34 +76,46 @@ void decodeImage(const std::string &source, const std::string &destination)
     free_image(img);
 }
 
+void encodeImage()
+{
+    decoder *d = init_decoder("img/pillars.jpg");
+    decode_image(d);
+    image *img = get_image(d);
+    free_decoder(d);
+    encoder *e = init_encoder("test.jpg", img, JPEG_QUALITY_100);
+    encode_image(e);
+    free_encoder(e);
+}
+
 int main()
 {
-    char c;
-    while (true)
-    {
-        std::cout << "Select between d (decode), e (encode), x (exit) : ";
-        std::cin >> c;
+    // char c;
+    // while (true)
+    // {
+    //     std::cout << "Select between d (decode), e (encode), x (exit) : ";
+    //     std::cin >> c;
         
-        if (c == 'x')
-            break;
-        if (c == 'e')
-        {
-            std::cout << "Encoding not supported!" << std::endl;
-            continue;
-        }
+    //     if (c == 'x')
+    //         break;
+    //     if (c == 'e')
+    //     {
+    //         std::cout << "Encoding not supported!" << std::endl;
+    //         continue;
+    //     }
 
-        std::cout << "Select source file for decoding" << std::endl;
-        std::string src = FileUtil::getSingleFileAbsPath();
-        if (src.empty())
-        {
-            std::cout << "File not selected!" << std::endl;
-             continue;
-        }
-        std::cout << "Do you want to dump the pixel values ? (y/n) ";
-        std::cin >> c;
-        std::filesystem::path path(src);
-        std::string dst = c == 'y' ? path.filename().string() + ".dump" : "";
-        decodeImage(src, dst);
-    }
+    //     std::cout << "Select source file for decoding" << std::endl;
+    //     std::string src = FileUtil::getSingleFileAbsPath();
+    //     if (src.empty())
+    //     {
+    //         std::cout << "File not selected!" << std::endl;
+    //          continue;
+    //     }
+    //     std::cout << "Do you want to dump the pixel values ? (y/n) ";
+    //     std::cin >> c;
+    //     std::filesystem::path path(src);
+    //     std::string dst = c == 'y' ? path.filename().string() + ".dump" : "";
+    //     decodeImage(src, dst);
+    // }
+    encodeImage();
     return 0;
 }

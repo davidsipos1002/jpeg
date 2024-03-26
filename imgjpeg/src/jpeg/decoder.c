@@ -612,6 +612,7 @@ static void build_color(decoder_s *d)
     {
         for (uint32_t jj = 0; jj < bj; jj++)
         {
+            // TODO: this can be optimized
             for (uint8_t i = 0; i < 8; i++)
             {
                 for (uint8_t j = 0; j < 8; j++)
@@ -669,7 +670,7 @@ void *process_component(void *p)
     return NULL;
 }
 
-static void obtainYCbCr(decoder_s *d)
+static void obtain_YCbCr(decoder_s *d)
 {
     // if only one component no multithreading
     if (d->nf == 1)
@@ -723,7 +724,7 @@ static void obtainYCbCr(decoder_s *d)
 static uint8_t rebuild_image(decoder_s *d)
 {    
     // obtain the pixel values from the decoded blocks
-    obtainYCbCr(d);
+    obtain_YCbCr(d);
     
     // we won't get rid of padding for now because it is not essential
     // we have YCbCr blocks for all components
