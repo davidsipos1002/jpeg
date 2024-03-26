@@ -730,34 +730,6 @@ static uint8_t rebuild_image(decoder_s *d)
         build_grayscale(d);
     else
         build_color(d);
-
-    FILE *f = fopen("/Users/david/Year 3/Semester 2/IP/Lab/ipmanager/img.txt", "w");
-
-    fprintf(f, "%u %u\n", d->img->y, d->img->x);
-    for (uint16_t i = 0; i < d->img->y; i++)
-    {
-        for (uint16_t j = 0; j < d->img->x; j++)
-            fprintf(f, "%u ", d->img->r[i][j]); 
-        fprintf(f, "\n");
-    }
-    fprintf(f, "\n");
-    
-    for (uint16_t i = 0; i < d->img->y; i++)
-    {
-        for (uint16_t j = 0; j < d->img->x; j++)
-            fprintf(f, "%u ", d->img->g[i][j]); 
-        fprintf(f, "\n");
-    }
-    fprintf(f, "\n");
-
-    for (uint16_t i = 0; i < d->img->y; i++)
-    {
-        for (uint16_t j = 0; j < d->img->x; j++)
-            fprintf(f, "%u ", d->img->b[i][j]); 
-        fprintf(f, "\n");
-    }
-
-    fclose(f);
     return 1;
 }
 
