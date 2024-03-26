@@ -62,7 +62,8 @@ typedef struct
     uint16_t vmax; // max vertical sampling factor
     component comps[3]; // component information
     scan currscan; // current scan information
-    image *img;
+    uint8_t gotimg; // remembers whether the image pointer was requested
+    image *img; // final image
 } decoder_s;
 
 // thread parameter 
@@ -789,6 +790,13 @@ uint8_t decode_image(decoder *dec)
     return stat;
 }
 
+image *get_image(decoder *dec)
+{
+    decoder_s *d = (decoder_s *) dec;
+    d->gotimg = 1;
+    return d->img;
+}
+
 // free decoder resources
 void free_decoder(decoder *dec)
 {
@@ -806,6 +814,7 @@ void free_decoder(decoder *dec)
             free(d->comps[i].blocks);
         }
     }
-    free_image(d->img);
+    if (!d->gotimg)
+        free_image(d->img);
     free(d);
 }
