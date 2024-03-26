@@ -78,7 +78,7 @@ void decodeImage(const std::string &source, const std::string &destination)
 
 void encodeImage()
 {
-    decoder *d = init_decoder("img/bdct_simple80.jpg");
+    decoder *d = init_decoder("img/everest_sub.jpg");
     decode_image(d);
     image *img = get_image(d);
     free_decoder(d);

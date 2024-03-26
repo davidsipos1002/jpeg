@@ -10,6 +10,7 @@
 #include <jpeg/huffman.h>
 
 #include <mem.h>
+#include <threads.h>
 
 typedef struct
 {
@@ -28,6 +29,16 @@ typedef struct
     uint8_t b; // byte waiting to be written
     uint8_t cnt; // used to where are we in the current byte
 } encoder_s;
+
+// thread parameter
+typedef struct
+{
+    encoder_s *e; // encoder instance
+    uint8_t comp; // component to process;
+    pthread_mutex_t *m; // mutex protecting rdy
+    pthread_cond_t *c; // condition variable associated with the mutex
+    volatile uint8_t *rdy;
+} encoder_tp;
 
 // very simple encoder, meaning fixed Huffman tables, no chroma subsampling, no restart
 // intervals and only 3 quality factors 100, 80, 50
@@ -347,8 +358,16 @@ static void convert_components(encoder_s *e)
 }
 
 // prepare blocks for the entropy encoding
-static void prepare_component(encoder_s *e, uint8_t comp, uint8_t chroma)
+static void *prepare_component(void *p)
 {
+    encoder_tp *param = (encoder_tp *) p;
+    encoder_s *e = param->e;
+    uint8_t comp = param->comp;
+    pthread_mutex_t *m = param->m;
+    pthread_cond_t *c = param->c;
+    volatile uint8_t *rdy = param->rdy;
+    uint8_t chroma = comp != 0;
+
     safeMalloc(e->datau[comp], e->blc * sizeof(int16_t *));
     for (uint32_t b = 0; b < e->blc; b++)
     {
@@ -358,13 +377,42 @@ static void prepare_component(encoder_s *e, uint8_t comp, uint8_t chroma)
         quantize(e->datau[comp][b], qtables[e->q][chroma]);
     }
     free_matrices(e->bl[comp]);
+    
+    pthread_mutex_lock(m);
+    *rdy += 1;
+    pthread_cond_signal(c);
+    pthread_mutex_unlock(m);
+    return NULL;
 }
 
+// use multithreading to prepare each component
 static void prepare_for_entropy_coding(encoder_s *e)
 {
-    prepare_component(e, 0, 0);
-    prepare_component(e, 1, 1);
-    prepare_component(e, 2, 1);
+    pthread_mutex_t *m = mutex_create();
+    pthread_cond_t *c = cond_create();
+    pthread_t *t[3];
+    encoder_tp params[3];
+    uint8_t rdy = 0;
+    
+    for (uint8_t i = 0; i < 3; i++)
+    {
+        params[i].e = e;
+        params[i].comp = i;
+        params[i].m = m;
+        params[i].c = c;
+        params[i].rdy = &rdy;
+        t[i] = thread_create(prepare_component, &params[i]);
+    }
+
+    pthread_mutex_lock(m);
+    while (rdy < 3)
+        pthread_cond_wait(c, m);
+    pthread_mutex_unlock(m);
+    
+    for (uint8_t i = 0; i < 3; i++)
+        thread_free(t[i]);
+    mutex_free(m);
+    cond_free(c);
 }
 
 // use decoder functions to generate the encoder Huffman tables
