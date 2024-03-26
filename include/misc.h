@@ -12,6 +12,10 @@
 #define ENDIAN_SWAP(x) (__builtin_bswap16(x))
 #define TO_UINT_ADVANCE(t, x, y) (x) = *((t *) (y)); (y) += sizeof(t)
 
+#ifdef __aarch64__
+#define USE_NEON
+#endif
+
 #define safeMalloc(p, x)           \
 do                                 \
 {                                  \

@@ -3,6 +3,9 @@
 #include <math.h>
 #include <stdlib.h>
 #include <mem.h>
+#include <misc.h>
+
+// lookup tables
 
 static uint8_t zigzag[8][8] = 
 {
@@ -148,8 +151,19 @@ static uint8_t izigzag[] =
 	0x77,
 };
 
-// These functions are just for initial functionality testing
-// They will be rewritten to use ARM Neon and Intel AVX
+static jpegf costable[8][8] = 
+{
+	1.000000, 0.980957, 0.923828, 0.831543, 0.707031, 0.555664, 0.382568, 0.195068, 
+	1.000000, 0.831543, 0.382568, -0.195068, -0.707031, -0.980957, -0.923828, -0.555664, 
+	1.000000, 0.555664, -0.382568, -0.980957, -0.707031, 0.195068, 0.923828, 0.831543, 
+	1.000000, 0.195068, -0.923828, -0.555664, 0.707031, 0.831543, -0.382568, -0.980957, 
+	1.000000, -0.195068, -0.923828, 0.555664, 0.707031, -0.831543, -0.382568, 0.980957, 
+	1.000000, -0.555664, -0.382568, 0.980957, -0.707031, -0.195068, 0.923828, -0.831543, 
+	1.000000, -0.831543, 0.382568, 0.195068, -0.707031, 0.980957, -0.923828, 0.555664, 
+	1.000000, -0.980957, 0.923828, -0.831543, 0.707031, -0.555664, 0.382568, -0.195068, 
+};
+
+static jpegf c[8] = {0.7071067812, 1, 1, 1, 1, 1, 1, 1};
 
 // this function generates izigzag from the zigzag matrix
 void gen_inverse_zigzag()
@@ -179,20 +193,19 @@ void gen_inverse_zigzag()
 // this function generates the above cos table
 void gen_cos_table()
 {
-	printf("#ifdef __aarch64__\n");
-	printf("static float16_t costable[8][8] = \n");
+	printf("static jpegf costable[8][8] = \n");
 	printf("{\n");
 	for (uint8_t i = 0; i < 8; i++)
 	{
+		printf("\t");
 		for (uint8_t j = 0; j < 8; j++)
-		{	
-		}
+			printf("%f, ", (jpegf) cos((double) (2 * i + 1) * j * M_PI / 16));
+		printf("\n");
 	}
 	printf("};\n");
-	printf("#endif");
 }
 
-#ifdef __aarch64__
+#ifdef USE_NEON
 void dequantize(int16_t *b, int16_t *q)
 {
 	// we will do the multiplication using ARM Neon
@@ -227,6 +240,59 @@ void unzigzag(int16_t *b, jpegf **mat)
 	}
 }
 
+#ifdef USE_NEON
+// defined in Annex A 3.3 of the standard
+static jpegf idct_helper(jpegf **mat, uint8_t ii, uint8_t jj)
+{
+	// row normalization constants
+	float16x8_t rowc;
+	// cosine value for a row
+	float16x8_t rowcos;
+	// accumulated columns sums
+	float16x8_t sumcol = vmovq_n_f16(0);
+	// normalization constants for columns of a row
+	float16x8_t colc;
+	// cosine values for columns of a row
+	float16x8_t colcos;
+	// matrix row
+	float16x8_t matrow;
+	// partial result accumulator
+	float16x8_t part;
+	// final 4 values to be added see below
+	float16_t r[4];
+
+	// compute innersum for each row and accumulate the sums per columns in sumcol
+	for (uint8_t i = 0; i < 8; i++)
+	{
+		// load the values
+		rowc = vmovq_n_f16(c[i]);
+		rowcos = vmovq_n_f16(costable[ii][i]);
+		colc = vld1q_f16(c);	
+		colcos = vld1q_f16(costable[jj]);
+		matrow = vld1q_f16(mat[i]);
+
+		// compute innersum elements
+		part = vmulq_f16(rowc, rowcos);
+		part = vmulq_f16(part, colc);
+		part = vmulq_f16(part, colcos);
+		part = vmulq_f16(part, matrow);
+		
+		// acummulate the innersum elements per column
+		sumcol = vaddq_f16(sumcol, part);
+	}
+	
+	// we need to add the 8 floats in sumcol 
+	// and divide by 4 to get the final result
+	
+	// split the 8 floats into two groups of 4 floats
+	float16x4_t hsumcol = vget_high_f16(sumcol);
+	float16x4_t lsumcol = vget_low_f16(sumcol);
+	float16x4_t sum = vadd_f16(lsumcol, hsumcol);
+	vst1_f16(r, sum);
+	float16_t finalsum = r[0] + r[1] + r[2] + r[3];
+	return finalsum / 4;
+}
+#else
 static jpegf idct_helper(jpegf **mat, uint8_t ii, uint8_t jj)
 {
 	float ret = 0;
@@ -234,21 +300,20 @@ static jpegf idct_helper(jpegf **mat, uint8_t ii, uint8_t jj)
 	{
 		for (uint8_t j = 0; j < 8; j++)
 		{
-			jpegf ci = i == 0 ? (1 / sqrt(2)) : 1; 
-			jpegf cj = j == 0 ? (1 / sqrt(2)) : 1;	
-			jpegf cosi = cos((double) (2 * ii + 1) * i * M_PI / 16);
-			jpegf cosj = cos((double) (2 * jj + 1) * j * M_PI / 16);
-			ret += ci * cj * mat[i][j] * cosi * cosj;
+			jpegf cosi = costable[ii][i];
+			jpegf cosj = costable[jj][j];
+			ret += c[i] * c[j] * mat[i][j] * cosi * cosj;
 		}
 	}
 	ret /= 4;
 	return ret;
 }
+#endif
 
 // defined in Annex A 3.3 of the standard
 void idct(jpegf **mat)
 {
-	float res[8][8];
+	jpegf res[8][8];
 	for (uint8_t i = 0; i < 8; i++)
 		for (uint8_t j = 0; j < 8; j++)
 			res[i][j] = idct_helper(mat, i, j);
@@ -257,12 +322,30 @@ void idct(jpegf **mat)
 			mat[i][j] = res[i][j];
 }
 
+#ifdef USE_NEON
+void undo_level_shift(jpegf **mat)
+{
+	// load constant 128 in of the 128-bit Q registers
+	float16x8_t shift = vmovq_n_f16(128);
+	for (uint8_t i = 0; i < 8;i ++)
+	{
+		float16_t *rowptr = mat[i];
+		// load row to Q register
+		float16x8_t rw = vld1q_f16(rowptr);
+		// add the two registers
+		float16x8_t shifted = vaddq_f16(rw, shift);
+		// store result
+		vst1q_f16(rowptr, shifted);
+	}
+}
+#else
 void undo_level_shift(jpegf **mat)
 {
 	for (uint8_t i = 0; i < 8; i++)
 		for (uint8_t j = 0; j < 8; j++)
 			mat[i][j] += 128;
 }
+#endif
 
 static jpegf get_min(jpegf x, jpegf y)
 {
@@ -288,6 +371,41 @@ static jpegf get_round(jpegf x)
 // R = Min(Max(0,Round(Y +1.402*(CR −128) )),255)
 // G = Min(Max(0,Round(Y −(0.114*1.772*(CB −128)+0.299*1.402*(CR −128))/0.587)),255)
 // B = Min(Max(0,Round(Y +1.772*(CB −128) )),255)
+#ifdef USE_NEON
+void convert_to_rgb(jpegf y, jpegf cb, jpegf cr, uint8_t *rp, uint8_t *gp, uint8_t *bp)
+{
+	static float16_t cbc[] = {0, -0.3441, 1.772, 0};
+	static float16_t crc[] = {1.402, -0.7141, 0, 0};
+
+	float16x4_t cst = vmov_n_f16(128);
+	float16x4_t vy = vmov_n_f16(y);
+	float16x4_t vcb = vmov_n_f16(cb);
+	float16x4_t vcr = vmov_n_f16(cr);
+	float16x4_t vcbc = vld1_f16(cbc);
+	float16x4_t vcrc = vld1_f16(crc);
+	float16x4_t res = vmov_n_f16(0);
+	float16_t ret[4];
+	
+	vcb = vsub_f16(vcb, cst);
+	vcb = vmul_f16(vcb, vcbc);
+	vcr = vsub_f16(vcr, cst);
+	vcr = vmul_f16(vcr, vcrc);
+	
+	res = vadd_f16(res, vy);
+	res = vadd_f16(res, vcb);
+	res = vadd_f16(res, vcr);
+	res = vrnd_f16(res);
+	cst = vmov_n_f16(0);
+	res = vmax_f16(res, cst);
+	cst = vmov_n_f16(255);
+	res = vmin_f16(res, cst); 
+
+	vst1_f16(ret, res);
+	*rp = ret[0];
+	*gp = ret[1];
+	*bp = ret[2];
+}
+#else
 void convert_to_rgb(jpegf y, jpegf cb, jpegf cr, uint8_t *rp, uint8_t *gp, uint8_t *bp)
 {
 	jpegf r = get_min(get_max(0, get_round(y + 1.402 * (cr - 128))), 255); 	
@@ -297,3 +415,4 @@ void convert_to_rgb(jpegf y, jpegf cb, jpegf cr, uint8_t *rp, uint8_t *gp, uint8
 	*gp = (uint8_t) g;
 	*bp = (uint8_t) b;
 }
+#endif

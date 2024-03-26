@@ -630,13 +630,9 @@ static uint8_t rebuild_image(decoder_s *d)
                 jpegf **currmat = d->comps[i].m->mat[b];
                 dequantize(currbl, q);
                 unzigzag(currbl, currmat);
-                // free the block as it is not needed anymore
-                free(d->comps[i].blocks[b]); 
                 idct(currmat);
                 undo_level_shift(currmat);
             }
-            // free all block pointers as they are not needed anymore
-            free(d->comps[i].blocks);
         }
     } 
 
@@ -723,7 +719,12 @@ void free_decoder(decoder *dec)
     for (uint8_t i = 0; i < 3; i++)
     {
         if (d->comps[i].blc)
+        {
             free_matrices(d->comps[i].m);
+            for (uint32_t b = 0; b < d->comps[i].blc; b++)
+                free(d->comps[i].blocks[b]); 
+            free(d->comps[i].blocks);
+        }
     }
     free_image(d->img);
     free(d);
