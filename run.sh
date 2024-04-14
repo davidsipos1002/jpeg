@@ -1,1 +1,1 @@
-build/JPEG > out.log
+build/JPEG
