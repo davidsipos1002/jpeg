@@ -19,6 +19,5 @@ add_executable(${PROJECT_NAME} ${sources})
 target_include_directories(${PROJECT_NAME} PUBLIC ${includes} ${OpenCV_INCLUDE_DIRS})
 
 target_link_libraries(${PROJECT_NAME} PUBLIC ${OpenCV_LIBS})
-target_link_libraries(${PROJECT_NAME} PUBLIC nfd)
 target_link_libraries(${PROJECT_NAME} PUBLIC util)
 target_link_libraries(${PROJECT_NAME} PUBLIC imgjpeg)
